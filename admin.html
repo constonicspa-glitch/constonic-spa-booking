@@ -14,7 +14,7 @@
       <div>
         <p class="eyebrow">CONSTONIC Beauty Center</p>
         <h1>康姿多儷 SPA 行事曆後台</h1>
-        <p class="subtitle">美容師帳號登入｜兩位皆可查看全部預約｜行事曆管理</p>
+        <p class="subtitle">美容師帳號登入｜三位皆可查看全部預約｜行事曆管理</p>
       </div>
     </header>
 
@@ -63,10 +63,19 @@
       </section>
       <section class="card">
         <h2 id="calendarTitle">今日行事曆</h2>
+        <div id="adminStats" class="stats-grid"></div>
         <div id="calendarView"></div>
       </section>
     </main>
   </div>
+  <div id="bookingModal" class="modal hidden">
+    <div class="modal-content booking-modal-content">
+      <button type="button" class="modal-close" onclick="closeBookingModal()">×</button>
+      <h2>預約完整資料</h2>
+      <div id="bookingModalBody"></div>
+    </div>
+  </div>
+
   <script src="config.js"></script>
   <script src="admin.js"></script>
 </body>
