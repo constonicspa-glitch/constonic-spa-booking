@@ -1,19 +1,24 @@
 window.CONSTONIC_CONFIG = {
-  SUPABASE_URL: "請貼上妳的 API URL",
-  SUPABASE_ANON_KEY: "請貼上妳的 Publishable key",
+  SUPABASE_URL: "https://fwhtqmyutjmlhqnfsqzi.supabase.co/rest/v1/",
+  SUPABASE_ANON_KEY: "sb_publishable_7tiL5DpQr2jcmISWxeBhzA_xruG3gn7",
 
   STAFF_ACCOUNTS: [
     {
-      username: "yajie",
-      password: "請改成雅潔老師密碼",
+      username: "雅潔",
+      password: "j@28045210",
       displayName: "雅潔老師",
       role: "owner"
     },
     {
-      username: "qiaoxuan",
-      password: "請改成巧萱美容師密碼",
+      username: "巧萱",
+      password: "x@2723611",
       displayName: "巧萱美容師",
       role: "staff"
-    }
-  ]
-};
+    },
+{
+  username: "曼曼",
+  password: "m@2723611",
+  displayName: "曼曼美甲師",
+  role: "staff"
+}
+];
