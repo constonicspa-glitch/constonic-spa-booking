@@ -277,5 +277,35 @@ footer{text-align:center;color:#8a765a;padding:28px;letter-spacing:1px}
 }
 
 
-/* ===== 康姿多儷後台 V3：顏色、統計、彈窗、拖曳 ===== */
-.stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:10px 0 18px}.stat-card{border:1px solid rgba(185,144,60,.28);border-radius:20px;padding:16px;background:linear-gradient(135deg,#fffdf8,#f7edd7);box-shadow:0 8px 18px rgba(73,49,23,.06)}.stat-value{font-size:28px;font-weight:800;color:var(--green)}.stat-label{margin-top:4px;color:var(--deepgold);font-weight:700}.booking-card{position:relative;cursor:pointer;padding-left:17px}.booking-card:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(73,49,23,.12)}.booking-color-strip{position:absolute;left:0;top:0;bottom:0;width:7px;border-radius:16px 0 0 16px}.therapist-yajie .booking-color-strip{background:#e83e8c}.therapist-qiaoxuan .booking-color-strip{background:#8e44ad}.therapist-manman .booking-color-strip{background:#2878d7}.therapist-none .booking-color-strip{background:#9b9385}.therapist-label{display:inline-flex;align-items:center;gap:5px;font-weight:800}.therapist-label:before{content:"●";font-size:15px}.therapist-label.therapist-yajie:before{color:#e83e8c}.therapist-label.therapist-qiaoxuan:before{color:#8e44ad}.therapist-label.therapist-manman:before{color:#2878d7}.therapist-label.therapist-none:before{color:#9b9385}.calendar-head.therapist-yajie{background:linear-gradient(135deg,#e83e8c,#b91e69)}.calendar-head.therapist-qiaoxuan{background:linear-gradient(135deg,#8e44ad,#642d7d)}.calendar-head.therapist-manman{background:linear-gradient(135deg,#2878d7,#1d579e)}.calendar-head.therapist-none{background:linear-gradient(135deg,#9b9385,#756d61)}.droppable-slot.drag-over{background:rgba(214,181,109,.22);outline:2px dashed rgba(185,144,60,.65);outline-offset:-6px}.booking-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.booking-actions button{margin-top:0}.booking-modal-content{position:relative;width:min(760px,96vw)}.modal-close{position:absolute;right:18px;top:14px;width:40px;height:40px;border-radius:50%;padding:0;font-size:24px;line-height:1}.booking-item-lines{margin-top:6px}@media(max-width:760px){.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* ===== 修正版：只顯示一張預約卡、正確欄位、點擊彈窗 ===== */
+.stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:10px 0 18px}
+.stat-card{border:1px solid rgba(185,144,60,.28);border-radius:20px;padding:16px;background:linear-gradient(135deg,#fffdf8,#f7edd7);box-shadow:0 8px 18px rgba(73,49,23,.06)}
+.stat-value{font-size:28px;font-weight:800;color:var(--green)}
+.stat-label{margin-top:4px;color:var(--deepgold);font-weight:700}
+.booking-card{position:relative;cursor:pointer;padding-left:17px}
+.calendar-booking-card{min-width:0;max-width:100%;padding:14px 14px 14px 18px;margin:0;line-height:1.55;overflow:hidden}
+.calendar-booking-card .booking-actions{display:none}
+.calendar-booking-card strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.booking-item-lines{margin-top:6px;font-size:14px}
+.booking-card:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(73,49,23,.12)}
+.booking-color-strip{position:absolute;left:0;top:0;bottom:0;width:7px;border-radius:16px 0 0 16px}
+.therapist-yajie .booking-color-strip{background:#e83e8c}
+.therapist-qiaoxuan .booking-color-strip{background:#8e44ad}
+.therapist-manman .booking-color-strip{background:#2878d7}
+.therapist-none .booking-color-strip{background:#9b9385}
+.therapist-label{display:inline-flex;align-items:center;gap:5px;font-weight:800}
+.therapist-label:before{content:"●";font-size:15px}
+.therapist-label.therapist-yajie:before{color:#e83e8c}
+.therapist-label.therapist-qiaoxuan:before{color:#8e44ad}
+.therapist-label.therapist-manman:before{color:#2878d7}
+.therapist-label.therapist-none:before{color:#9b9385}
+.calendar-head.therapist-yajie{background:linear-gradient(135deg,#e83e8c,#b91e69)}
+.calendar-head.therapist-qiaoxuan{background:linear-gradient(135deg,#8e44ad,#642d7d)}
+.calendar-head.therapist-manman{background:linear-gradient(135deg,#2878d7,#1d579e)}
+.calendar-head.therapist-none{background:linear-gradient(135deg,#9b9385,#756d61)}
+.droppable-slot.drag-over{background:rgba(214,181,109,.22);outline:2px dashed rgba(185,144,60,.65);outline-offset:-6px}
+.booking-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.booking-actions button{margin-top:0}
+.booking-modal-content{position:relative;width:min(760px,96vw)}
+.modal-close{position:absolute;right:18px;top:14px;width:40px;height:40px;border-radius:50%;padding:0;font-size:24px;line-height:1}
+@media(max-width:760px){.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
