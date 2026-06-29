@@ -1,5 +1,5 @@
 window.CONSTONIC_CONFIG = {
-  SUPABASE_URL: "https://fwhtqmyutjmlhqnfsqzi.supabase.co/rest/v1/",
+  SUPABASE_URL: "https://fwhtqmyutjmlhqnfsqzi.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_7tiL5DpQr2jcmISWxeBhzA_xruG3gn7",
 
   STAFF_ACCOUNTS: [
@@ -15,10 +15,11 @@ window.CONSTONIC_CONFIG = {
       displayName: "巧萱美容師",
       role: "staff"
     },
-{
-  username: "曼曼",
-  password: "m@2723611",
-  displayName: "曼曼美甲師",
-  role: "staff"
-}
-];
+    {
+      username: "曼曼",
+      password: "m@2723611",
+      displayName: "曼曼美甲師",
+      role: "staff"
+    }
+  ]
+};
