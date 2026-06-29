@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>康姿多儷 SPA 行事曆後台</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="brand-header">
+      <div class="logo-mark">牡丹</div>
+      <div>
+        <p class="eyebrow">CONSTONIC Beauty Center</p>
+        <h1>康姿多儷 SPA 行事曆後台</h1>
+        <p class="subtitle">美容師帳號登入｜兩位皆可查看全部預約｜行事曆管理</p>
+      </div>
+    </header>
+
+    <section class="card notice" id="loginCard">
+      <h2>後台登入</h2>
+      <div class="field">
+        <label for="username">帳號</label>
+        <input id="username" placeholder="請輸入帳號">
+      </div>
+      <div class="field">
+        <label for="password">密碼</label>
+        <input id="password" type="password" placeholder="請輸入密碼">
+      </div>
+      <button class="primary" onclick="login()">登入後台</button>
+      <p id="loginMessage" class="hint"></p>
+    </section>
+
+    <main id="adminMain" class="hidden">
+      <section class="card">
+        <h2 id="welcomeTitle">行事曆查詢</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label for="date">選擇日期</label>
+            <input type="date" id="date">
+          </div>
+          <div class="field">
+            <label for="therapistFilter">美容師</label>
+            <select id="therapistFilter">
+              <option value="全部">全部</option>
+              <option value="雅潔老師">雅潔老師</option>
+              <option value="巧萱美容師">巧萱美容師</option>
+              <option value="曼曼美甲師">曼曼美甲師</option>
+              <option value="不指定">不指定</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="viewMode">檢視模式</label>
+            <select id="viewMode">
+              <option value="day">單日行事曆</option>
+              <option value="list">列表模式</option>
+            </select>
+          </div>
+        </div>
+        <button class="primary" onclick="renderBookings()">更新行事曆</button>
+        <button onclick="logout()">登出</button>
+      </section>
+      <section class="card">
+        <h2 id="calendarTitle">今日行事曆</h2>
+        <div id="calendarView"></div>
+      </section>
+    </main>
+  </div>
+  <script src="config.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

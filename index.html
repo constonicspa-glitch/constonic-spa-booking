@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>康姿多儷 SPA 線上預約</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="brand-header">
+      <div class="logo-mark">牡丹</div>
+      <div>
+        <p class="eyebrow">CONSTONIC Beauty Center</p>
+        <h1>康姿多儷 SPA 線上預約</h1>
+        <p class="subtitle">可一次預約多項療程｜送出後店家將於營業時間確認</p>
+      </div>
+    </header>
+
+    <section class="card notice">
+      <h2>預約提醒</h2>
+      <p>週一～週五 10:00–20:00｜週六 10:00–18:00｜週日店休。</p>
+      <p>可一次加入多個療程，最後只需填寫一次資料。身體按摩指定雅潔老師加收 300 元。</p>
+      <p>由於服務項目眾多，如不確定適合的療程，歡迎電話預約洽詢：06-2723611。</p>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h2>1. 選擇服務分類</h2>
+        <div id="categoryButtons" class="button-grid"></div>
+      </div>
+      <div class="card">
+        <h2>2. 選擇療程</h2>
+        <div id="serviceList" class="service-list muted">請先選擇服務分類</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. 本次預約清單</h2>
+      <div id="cartList" class="muted">尚未加入療程</div>
+      <div id="cartTotal" class="summary muted">請先加入至少一項療程</div>
+      <button type="button" onclick="clearCart()">清空預約清單</button>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h2>4. 個別指定服務人員</h2>
+        <p class="hint">請先加入療程，系統會在「本次預約清單」中讓您依每個項目選擇可服務的美容師／美甲師。</p>
+        <p id="teacherFee" class="hint"></p>
+      </div>
+      <div class="card">
+        <h2>5. 選擇日期</h2>
+        <div class="field">
+          <label for="date">預約日期</label>
+          <input type="date" id="date" />
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>6. 選擇可預約時段</h2>
+      <div id="slotList" class="slot-list muted">請先加入療程並選擇日期</div>
+    </section>
+
+    <section class="card">
+      <h2>7. 填寫預約資料</h2>
+      <form id="bookingForm">
+        <div class="form-grid">
+          <div class="field"><label for="name">姓名</label><input id="name" required placeholder="請輸入姓名"></div>
+          <div class="field"><label for="phone">電話</label><input id="phone" required placeholder="09xx-xxx-xxx"></div>
+          <div class="field"><label for="lineName">LINE 名稱</label><input id="lineName" placeholder="方便店家確認"></div>
+          <div class="field"><label for="firstVisit">是否第一次來店</label><select id="firstVisit"><option>是</option><option>否</option></select></div>
+        </div>
+        <div class="field"><label for="note">備註</label><textarea id="note" rows="3" placeholder="例如：想加強肩頸、敏感肌、需避開精油等"></textarea></div>
+        <div id="summary" class="summary muted">尚未選擇完整預約內容</div>
+        <button id="submitBtn" class="primary" type="submit">送出預約</button>
+        <p id="formMessage" class="hint"></p>
+      </form>
+    </section>
+  </div>
+
+  <div id="successModal" class="modal hidden">
+    <div class="modal-content">
+      <h2>預約已送出</h2>
+      <p>感謝您的預約，我們將於營業時間再次確認。</p>
+      <div id="successDetail"></div>
+      <button onclick="closeModal()" class="primary">完成</button>
+    </div>
+  </div>
+
+  <footer>康姿多儷 SPA 國際教育學苑｜CONSTONIC Beauty Center</footer>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
