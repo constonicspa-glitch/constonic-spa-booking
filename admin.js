@@ -54,6 +54,7 @@ function statusText(status) {
   if (status === "pending") return "待確認";
   if (status === "confirmed") return "已確認";
   if (status === "cancelled") return "已取消";
+  if (status === "completed") return "已完成";
   if (status === "nail_request") return "美甲待確認";
   return status || "待確認";
 }
@@ -187,6 +188,159 @@ async function dropBooking(event, newSlot, newTherapist) {
   if (error) { alert("修改時間失敗，請稍後再試。"); console.error(error); return; }
   renderBookings();
 }
+
+function money(n){
+  return Number(n || 0).toLocaleString("zh-TW");
+}
+
+function defaultCheckout(b){
+  const old = b.checkout || {};
+  const techRows = old.tech_rows || (b.items || []).map((item, idx) => ({
+    item_name: item.name || `技術${idx+1}`,
+    amount: 0,
+    rate: "30"
+  }));
+  return {
+    payment_status: old.payment_status || "未收款",
+    payment_method: old.payment_method || "現金",
+    tech_rows: techRows,
+    product_amount: Number(old.product_amount || 0),
+    course_amount: Number(old.course_amount || 0),
+    stored_value_new_amount: Number(old.stored_value_new_amount || 0),
+    platform_fixed_pay: Number(old.platform_fixed_pay || 0),
+    total_received: Number(old.total_received || 0),
+    invoice_status: old.invoice_status || "未開",
+    receipt_note: old.receipt_note || ""
+  };
+}
+
+function calcCheckoutTotal(c){
+  const techBonus = (c.tech_rows || []).reduce((sum, row) => {
+    return sum + Math.round(Number(row.amount || 0) * Number(row.rate || 0) / 100);
+  }, 0);
+  const productBonus = Math.round(Number(c.product_amount || 0) * 0.10);
+  const courseBonus = Math.round((Number(c.course_amount || 0) + Number(c.stored_value_new_amount || 0)) * 0.02);
+  const platformPay = Number(c.platform_fixed_pay || 0);
+  return { techBonus, productBonus, courseBonus, platformPay, salaryTotal: techBonus + productBonus + courseBonus + platformPay };
+}
+
+function renderCheckoutForm(b){
+  const c = defaultCheckout(b);
+  const totals = calcCheckoutTotal(c);
+  const rows = (c.tech_rows || []).map((row, idx) => `
+    <div class="cashier-row">
+      <div class="field">
+        <label>技術項目</label>
+        <input id="techName_${idx}" value="${escapeHtml(row.item_name || "")}">
+      </div>
+      <div class="field">
+        <label>技術金額</label>
+        <input id="techAmount_${idx}" type="number" min="0" value="${Number(row.amount || 0)}">
+      </div>
+      <div class="field">
+        <label>抽成</label>
+        <select id="techRate_${idx}">
+          <option value="30" ${String(row.rate)==="30" ? "selected" : ""}>30%</option>
+          <option value="40" ${String(row.rate)==="40" ? "selected" : ""}>40%</option>
+        </select>
+      </div>
+    </div>
+  `).join("");
+
+  return `<div class="cashier-box">
+    <h3>收銀／薪資計算</h3>
+    <p class="hint">商品10%；技術可選30%或40%；新購課程／新收儲值2%；平台團購固定薪資手動輸入。</p>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>收款狀態</label>
+        <select id="paymentStatus">
+          ${["已收款","部分收款","未收款"].map(v=>`<option ${c.payment_status===v?"selected":""}>${v}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>收款方式</label>
+        <select id="paymentMethod">
+          ${["現金","刷卡","匯款","LINE Pay","街口支付","Apple Pay","Google Pay","其他"].map(v=>`<option ${c.payment_method===v?"selected":""}>${v}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+
+    <h4>技術服務</h4>
+    <div id="techRows" data-count="${(c.tech_rows || []).length}">${rows}</div>
+
+    <h4>其他收入／獎金</h4>
+    <div class="form-grid">
+      <div class="field"><label>商品銷售金額（10%）</label><input id="productAmount" type="number" min="0" value="${c.product_amount}"></div>
+      <div class="field"><label>新購課程金額（2%）</label><input id="courseAmount" type="number" min="0" value="${c.course_amount}"></div>
+      <div class="field"><label>新收儲值金額（2%）</label><input id="storedValueNewAmount" type="number" min="0" value="${c.stored_value_new_amount}"></div>
+      <div class="field"><label>平台團購固定薪資</label><input id="platformFixedPay" type="number" min="0" value="${c.platform_fixed_pay}"></div>
+      <div class="field"><label>本次實際收款金額</label><input id="totalReceived" type="number" min="0" value="${c.total_received}"></div>
+      <div class="field">
+        <label>發票狀態</label>
+        <select id="invoiceStatus">
+          ${["未開","已開","免開"].map(v=>`<option ${c.invoice_status===v?"selected":""}>${v}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>收款備註</label>
+      <textarea id="receiptNote" rows="2" placeholder="例如：補尾款、優惠折扣、刷兩次卡等">${escapeHtml(c.receipt_note || "")}</textarea>
+    </div>
+
+    <div class="cashier-summary">
+      <div>技術獎金：NT$ ${money(totals.techBonus)}</div>
+      <div>商品獎金：NT$ ${money(totals.productBonus)}</div>
+      <div>課程／儲值獎金：NT$ ${money(totals.courseBonus)}</div>
+      <div>平台固定薪資：NT$ ${money(totals.platformPay)}</div>
+      <strong>本次薪資合計：NT$ ${money(totals.salaryTotal)}</strong>
+    </div>
+
+    <button type="button" class="primary" onclick="saveCheckout('${escapeHtml(b.id)}')">儲存收銀資料</button>
+  </div>`;
+}
+
+function collectCheckoutFromForm(){
+  const count = Number(document.getElementById("techRows")?.dataset.count || 0);
+  const tech_rows = [];
+  for(let i=0;i<count;i++){
+    tech_rows.push({
+      item_name: document.getElementById(`techName_${i}`)?.value || "",
+      amount: Number(document.getElementById(`techAmount_${i}`)?.value || 0),
+      rate: document.getElementById(`techRate_${i}`)?.value || "30"
+    });
+  }
+  const checkout = {
+    payment_status: document.getElementById("paymentStatus")?.value || "未收款",
+    payment_method: document.getElementById("paymentMethod")?.value || "現金",
+    tech_rows,
+    product_amount: Number(document.getElementById("productAmount")?.value || 0),
+    course_amount: Number(document.getElementById("courseAmount")?.value || 0),
+    stored_value_new_amount: Number(document.getElementById("storedValueNewAmount")?.value || 0),
+    platform_fixed_pay: Number(document.getElementById("platformFixedPay")?.value || 0),
+    total_received: Number(document.getElementById("totalReceived")?.value || 0),
+    invoice_status: document.getElementById("invoiceStatus")?.value || "未開",
+    receipt_note: document.getElementById("receiptNote")?.value || ""
+  };
+  checkout.calculated = calcCheckoutTotal(checkout);
+  return checkout;
+}
+
+async function saveCheckout(id){
+  const checkout = collectCheckoutFromForm();
+  const { error } = await db.from("bookings").update({ checkout, status: "completed" }).eq("id", id);
+  if(error){
+    alert("收銀資料儲存失敗");
+    console.error(error);
+    return;
+  }
+  alert("收銀資料已儲存");
+  closeBookingModal();
+  renderBookings();
+  if(typeof renderPendingCenter === "function") renderPendingCenter();
+}
+
 function openBookingModal(id) {
   const b = currentBookings.find(item => item.id === id); if (!b) return;
   $("bookingModalBody").innerHTML = `<div class="summary">
