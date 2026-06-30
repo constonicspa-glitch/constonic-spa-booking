@@ -187,6 +187,7 @@ async function dropBooking(event, newSlot, newTherapist) {
   const {error} = await db.from("bookings").update({slot:newSlot, therapist:newTherapist}).eq("id", id);
   if (error) { alert("修改時間失敗，請稍後再試。"); console.error(error); return; }
   renderBookings();
+  renderMonthlyReport();
 }
 
 function money(n){
@@ -339,6 +340,7 @@ async function saveCheckout(id){
   closeBookingModal();
   renderBookings();
   if(typeof renderPendingCenter === "function") renderPendingCenter();
+  if(typeof renderMonthlyReport === "function") renderMonthlyReport();
 }
 
 function openBookingModal(id) {
@@ -396,9 +398,159 @@ async function deleteBooking(id) {
   if (error) { alert("刪除失敗"); console.error(error); }
   renderBookings();
 }
+
+function sum(arr, fn){
+  return (arr || []).reduce((total, item) => total + Number(fn(item) || 0), 0);
+}
+
+function getMonthRange(dateStr){
+  const ym = (dateStr || new Date().toISOString().slice(0,10)).slice(0,7);
+  const year = Number(ym.slice(0,4));
+  const month = Number(ym.slice(5,7));
+  const lastDay = new Date(year, month, 0).getDate();
+  return { ym, start: `${ym}-01`, end: `${ym}-${String(lastDay).padStart(2,"0")}` };
+}
+
+function checkoutTotals(checkout){
+  const c = checkout || {};
+  const techRows = c.tech_rows || [];
+  const tech30Amount = sum(techRows.filter(r => String(r.rate)==="30"), r => r.amount);
+  const tech40Amount = sum(techRows.filter(r => String(r.rate)==="40"), r => r.amount);
+  const tech30Bonus = Math.round(tech30Amount * 0.30);
+  const tech40Bonus = Math.round(tech40Amount * 0.40);
+  const productAmount = Number(c.product_amount || 0);
+  const productBonus = Math.round(productAmount * 0.10);
+  const courseAmount = Number(c.course_amount || 0);
+  const storedValueNewAmount = Number(c.stored_value_new_amount || 0);
+  const courseBonus = Math.round((courseAmount + storedValueNewAmount) * 0.02);
+  const platformPay = Number(c.platform_fixed_pay || 0);
+  const totalReceived = Number(c.total_received || 0);
+  const salaryTotal = tech30Bonus + tech40Bonus + productBonus + courseBonus + platformPay;
+  return {
+    tech30Amount, tech40Amount, tech30Bonus, tech40Bonus,
+    productAmount, productBonus,
+    courseAmount, storedValueNewAmount, courseBonus,
+    platformPay, totalReceived, salaryTotal
+  };
+}
+
+function reportCard(title, lines){
+  return `<div class="report-card">
+    <h3>${escapeHtml(title)}</h3>
+    ${lines.map(row => `<div class="report-line"><span>${escapeHtml(row[0])}</span><strong>${escapeHtml(row[1])}</strong></div>`).join("")}
+  </div>`;
+}
+
+async function renderMonthlyReport(){
+  const old = document.getElementById("monthlyReportCard");
+  let box = old;
+  const adminMain = document.getElementById("adminMain");
+  if(!adminMain) return;
+
+  if(!box){
+    box = document.createElement("section");
+    box.className = "card";
+    box.id = "monthlyReportCard";
+    box.innerHTML = `
+      <div class="report-title-row">
+        <h2>本月收銀／薪資統計</h2>
+        <button type="button" onclick="renderMonthlyReport()">更新統計</button>
+      </div>
+      <div id="monthlyReportContent" class="muted">載入中...</div>
+    `;
+    adminMain.appendChild(box);
+  }
+
+  const content = document.getElementById("monthlyReportContent");
+  if(!content) return;
+
+  const dateValue = document.getElementById("date")?.value || new Date().toISOString().slice(0,10);
+  const { ym, start, end } = getMonthRange(dateValue);
+
+  const { data, error } = await db
+    .from("bookings")
+    .select("*")
+    .gte("date", start)
+    .lte("date", end)
+    .not("checkout", "is", null);
+
+  if(error){
+    content.innerHTML = "月報讀取失敗。";
+    console.error(error);
+    return;
+  }
+
+  const rows = data || [];
+  if(!rows.length){
+    content.className = "muted";
+    content.innerHTML = `${ym} 目前尚無收銀資料。`;
+    return;
+  }
+
+  content.className = "monthly-report-grid";
+
+  const allTotals = rows.map(b => checkoutTotals(b.checkout));
+  const totalRevenue = sum(allTotals, t => t.totalReceived);
+  const totalSalary = sum(allTotals, t => t.salaryTotal);
+  const totalProduct = sum(allTotals, t => t.productAmount);
+  const totalCourse = sum(allTotals, t => t.courseAmount);
+  const totalStored = sum(allTotals, t => t.storedValueNewAmount);
+  const totalPlatform = sum(allTotals, t => t.platformPay);
+
+  const paymentGroups = {};
+  rows.forEach(b => {
+    const method = b.checkout?.payment_method || "未填";
+    paymentGroups[method] = (paymentGroups[method] || 0) + Number(b.checkout?.total_received || 0);
+  });
+
+  const therapistGroups = {};
+  rows.forEach(b => {
+    const name = b.therapist || "不指定";
+    if(!therapistGroups[name]){
+      therapistGroups[name] = [];
+    }
+    therapistGroups[name].push(checkoutTotals(b.checkout));
+  });
+
+  let html = "";
+  html += reportCard(`${ym} 全店收銀`, [
+    ["本月收款", `NT$ ${money(totalRevenue)}`],
+    ["商品銷售", `NT$ ${money(totalProduct)}`],
+    ["課程銷售", `NT$ ${money(totalCourse)}`],
+    ["新收儲值", `NT$ ${money(totalStored)}`],
+    ["平台固定薪資", `NT$ ${money(totalPlatform)}`],
+    ["薪資合計", `NT$ ${money(totalSalary)}`]
+  ]);
+
+  html += reportCard("收款方式", Object.entries(paymentGroups).map(([method, amount]) => [method, `NT$ ${money(amount)}`]));
+
+  Object.entries(therapistGroups).forEach(([name, list]) => {
+    const tech30Amount = sum(list, t => t.tech30Amount);
+    const tech40Amount = sum(list, t => t.tech40Amount);
+    const tech30Bonus = sum(list, t => t.tech30Bonus);
+    const tech40Bonus = sum(list, t => t.tech40Bonus);
+    const productBonus = sum(list, t => t.productBonus);
+    const courseBonus = sum(list, t => t.courseBonus);
+    const platformPay = sum(list, t => t.platformPay);
+    const salary = sum(list, t => t.salaryTotal);
+    html += reportCard(`${name} 薪資`, [
+      ["技術30%金額", `NT$ ${money(tech30Amount)}`],
+      ["技術30%獎金", `NT$ ${money(tech30Bonus)}`],
+      ["技術40%金額", `NT$ ${money(tech40Amount)}`],
+      ["技術40%獎金", `NT$ ${money(tech40Bonus)}`],
+      ["商品10%", `NT$ ${money(productBonus)}`],
+      ["課程／儲值2%", `NT$ ${money(courseBonus)}`],
+      ["平台固定", `NT$ ${money(platformPay)}`],
+      ["薪資合計", `NT$ ${money(salary)}`]
+    ]);
+  });
+
+  content.innerHTML = html;
+}
+
 const today = new Date();
 $("date").value = today.toISOString().slice(0,10);
-$("date").addEventListener("change", renderBookings);
+$("date").addEventListener("change", () => { renderBookings(); renderMonthlyReport(); });
 $("therapistFilter").addEventListener("change", renderBookings);
 $("viewMode").addEventListener("change", renderBookings);
 if (getCurrentUser()) showAdmin();

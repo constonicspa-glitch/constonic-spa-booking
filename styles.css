@@ -367,3 +367,43 @@ footer{text-align:center;color:#8a765a;padding:28px;letter-spacing:1px}
 }
 .cashier-summary strong{color:var(--green);font-size:18px}
 @media(max-width:760px){.cashier-row{grid-template-columns:1fr}}
+
+
+/* V1.2 本月收銀／薪資統計 */
+.report-title-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.monthly-report-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+}
+.report-card{
+  border:1px solid rgba(185,144,60,.28);
+  border-radius:20px;
+  padding:16px;
+  background:linear-gradient(135deg,#fffdf8,#f7edd7);
+}
+.report-card h3{
+  margin:0 0 12px;
+  color:var(--green);
+}
+.report-line{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  padding:7px 0;
+  border-bottom:1px solid rgba(185,144,60,.16);
+}
+.report-line:last-child{border-bottom:0}
+.report-line strong{
+  color:var(--deepgold);
+  text-align:right;
+}
+@media(max-width:760px){
+  .monthly-report-grid{grid-template-columns:1fr}
+}
