@@ -105,6 +105,42 @@ function itemBlock(item){
   return item.duration + itemBuffer(item);
 }
 
+function isSameLocalDate(dateStr){
+  const now = new Date();
+  return dateStr === now.toISOString().slice(0,10);
+}
+
+function currentMinutesRoundedUp(){
+  const now = new Date();
+  const min = now.getHours()*60 + now.getMinutes();
+  return Math.ceil(min/30)*30;
+}
+
+function plannedSchedule(startTime){
+  let cursor = startTime;
+  return cart.map(item=>{
+    const serviceStart = cursor;
+    const serviceEnd = serviceStart + item.duration;
+    const buffer = itemBuffer(item);
+    const blockEnd = serviceEnd + buffer;
+    cursor = serviceEnd; // 下一個療程接在「服務結束」後，不被整理時間延後
+    return {
+      item,
+      therapist: item.therapist,
+      start: serviceStart,
+      serviceEnd,
+      buffer,
+      blockEnd
+    };
+  });
+}
+
+function plannedTotalBlockFromStart(){
+  if(!cart.length) return 0;
+  const plan = plannedSchedule(0);
+  return Math.max(...plan.map(p=>p.blockEnd));
+}
+
 function totals(){
   const serviceMinutes=cart.reduce((s,i)=>s+i.duration,0);
   const hasFace=cart.some(i=>i.category==="臉部保養");
@@ -250,16 +286,6 @@ function isTherapistBusy(therapist,start,end){
   });
 }
 
-function isSameLocalDate(dateStr){
-  const now = new Date();
-  return dateStr === now.toISOString().slice(0,10);
-}
-function currentMinutesRoundedUp(){
-  const now = new Date();
-  const min = now.getHours()*60 + now.getMinutes();
-  return Math.ceil(min/30)*30;
-}
-
 function renderSlots(){
   const date=$("date").value,slotList=$("slotList");
   slotList.innerHTML="";
@@ -275,16 +301,18 @@ function renderSlots(){
     return;
   }
   slotList.className="slot-list";
-  const maxBlock=Math.max(...cart.map(itemBlock));
-  const latestStart=cfgDay.close-maxBlock-20;
+
+  const totalNeeded = plannedTotalBlockFromStart();
+  const latestStart = cfgDay.close - totalNeeded;
   const todayCutoff = isSameLocalDate(date) ? currentMinutesRoundedUp() : cfgDay.open;
+  let availableCount = 0;
+
   for(let time=cfgDay.open;time<=latestStart;time+=30){
     if(time < todayCutoff) continue;
+    const plan = plannedSchedule(time);
     let busy=false;
-    for(const item of cart){
-      const start=time;
-      const end=time+itemBlock(item);
-      if(isTherapistBusy(item.therapist,start,end)){
+    for(const p of plan){
+      if(isTherapistBusy(p.therapist,p.start,p.blockEnd)){
         busy=true;
         break;
       }
@@ -297,6 +325,7 @@ function renderSlots(){
       btn.textContent+=" 已滿";
       btn.disabled=true;
     }else{
+      availableCount++;
       btn.onclick=()=>{
         selectedSlot=minutesToTime(time);
         [...slotList.children].forEach(el=>el.classList.remove("active"));
@@ -306,7 +335,8 @@ function renderSlots(){
     }
     slotList.appendChild(btn);
   }
-  if(slotList.children.length===0){
+
+  if(availableCount===0){
     slotList.textContent="今天目前已無可預約空檔，請選擇其他日期或電話洽詢 06-2723611。";
     slotList.className="slot-list muted";
   }
@@ -319,10 +349,11 @@ function updateSummary(){
     s.className="summary muted";
     return;
   }
-  const t=totals();
+  const start=timeToMinutes(selectedSlot);
+  const plan=plannedSchedule(start);
   const fee=cart.some(i=>i.category==="身體舒壓"&&i.teacherFee&&i.therapist==="雅潔老師")?"｜含雅潔老師身體指定費 +300 元":"";
   s.className="summary";
-  s.innerHTML=`<strong>預約確認</strong><br>項目：<br>${cart.map((item,idx)=>`${idx+1}. ${item.category}｜${item.name}（${item.duration} 分鐘）｜${item.therapist}`).join("<br>")}<br><br>療程時間合計：${t.serviceMinutes} 分鐘${fee}<br>日期：${$("date").value}<br>時間：${selectedSlot}`;
+  s.innerHTML=`<strong>預約確認</strong><br>項目：<br>${plan.map((p,idx)=>`${idx+1}. ${p.item.category}｜${p.item.name}（${p.item.duration} 分鐘）｜${p.therapist}｜${minutesToTime(p.start)}-${minutesToTime(p.serviceEnd)}`).join("<br>")}<br><br>療程時間合計：${cart.reduce((sum,i)=>sum+i.duration,0)} 分鐘${fee}<br>日期：${$("date").value}<br>開始時間：${selectedSlot}`;
 }
 
 $("date").addEventListener("change",()=>{selectedSlot="";loadBookingsAndSlots();updateSummary()});
@@ -341,33 +372,23 @@ $("bookingForm").addEventListener("submit",async e=>{
   btn.disabled=true;
   $("formMessage").textContent="預約送出中，請稍候...";
 
-  const groups={};
-  cart.forEach(item=>{
-    if(!groups[item.therapist]) groups[item.therapist]=[];
-    groups[item.therapist].push(item);
-  });
-
-  const payloads=Object.entries(groups).map(([therapist,items])=>{
-    const serviceMinutes=items.reduce((s,i)=>s+i.duration,0);
-    const hasFace=items.some(i=>i.category==="臉部保養");
-    const hasBody=items.some(i=>i.category==="身體舒壓");
-    const internalBuffer=hasBody?20:(hasFace?10:0);
-    return {
-      items:items.map(i=>({category:i.category,name:i.name,duration:i.duration,therapist:i.therapist})),
-      service_minutes:serviceMinutes,
-      internal_buffer:internalBuffer,
-      total_block:serviceMinutes+internalBuffer,
-      therapist,
-      date:$("date").value,
-      slot:selectedSlot,
-      customer_name:$("name").value,
-      phone:$("phone").value,
-      line_name:$("lineName").value,
-      first_visit:$("firstVisit").value,
-      note:$("note").value,
-      status:"pending"
-    };
-  });
+  const startMin=timeToMinutes(selectedSlot);
+  const plan=plannedSchedule(startMin);
+  const payloads=plan.map(p=>({
+    items:[{category:p.item.category,name:p.item.name,duration:p.item.duration,therapist:p.item.therapist}],
+    service_minutes:p.item.duration,
+    internal_buffer:p.buffer,
+    total_block:p.item.duration+p.buffer,
+    therapist:p.therapist,
+    date:$("date").value,
+    slot:minutesToTime(p.start),
+    customer_name:$("name").value,
+    phone:$("phone").value,
+    line_name:$("lineName").value,
+    first_visit:$("firstVisit").value,
+    note:$("note").value,
+    status:"pending"
+  }));
 
   const {error}=await db.from("bookings").insert(payloads);
   btn.disabled=false;
@@ -377,7 +398,7 @@ $("bookingForm").addEventListener("submit",async e=>{
     return;
   }
   $("formMessage").textContent="";
-  $("successDetail").innerHTML=`<div class="summary">姓名：${$("name").value}<br>項目：<br>${cart.map((i,idx)=>`${idx+1}. ${i.name}（${i.duration}分）｜${i.therapist}`).join("<br>")}<br>日期：${$("date").value}<br>時間：${selectedSlot}</div>`;
+  $("successDetail").innerHTML=`<div class="summary">姓名：${$("name").value}<br>項目：<br>${plan.map((p,idx)=>`${idx+1}. ${p.item.name}（${p.item.duration}分）｜${p.therapist}｜${minutesToTime(p.start)}-${minutesToTime(p.serviceEnd)}`).join("<br>")}<br>日期：${$("date").value}<br>時間：${selectedSlot}</div>`;
   $("successModal").classList.remove("hidden");
 });
 
@@ -388,5 +409,5 @@ function closeModal(){
 
 renderCategories();
 renderCart();
-const today = new Date();
-$("date").min = today.toISOString().slice(0,10);
+const today=new Date();
+$("date").min=today.toISOString().slice(0,10);
