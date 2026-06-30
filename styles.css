@@ -1110,3 +1110,85 @@ html, body{
 .service-card.selected::before,.service-item.selected::before,.slot-btn.selected::before,.slot-button.selected::before{content:"✓ ";font-weight:900;}
 .closed-day-message{padding:14px 16px;margin:8px 0 12px;border:1px solid rgba(185,144,60,.28);border-radius:16px;background:#fff7e6;color:var(--brown);font-weight:700;}
 @media(max-width:760px){.v35-date-label{width:100%;font-size:18px}.v35-date-toolbar{gap:8px}.v35-date-toolbar button{flex:1;}}
+
+
+/* CONSTONIC ADMIN V3.7 emergency modal */
+.v37-modal{
+  max-height:88vh;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.v37-header{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  padding:16px 18px;
+  border-bottom:1px solid rgba(185,144,60,.22);
+  background:linear-gradient(135deg,#fffdf8,#f7edd7);
+}
+.v37-header h2{
+  margin:4px 0 0;
+  color:var(--green);
+}
+.v37-body{
+  padding:16px;
+  overflow:auto;
+  display:grid;
+  grid-template-columns:1.2fr .8fr;
+  gap:14px;
+}
+.v37-panel{
+  border:1px solid rgba(185,144,60,.24);
+  border-radius:18px;
+  padding:14px;
+  background:#fffdf8;
+}
+.v37-panel h3{
+  margin:0 0 12px;
+  color:var(--green);
+}
+.v37-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.v37-grid div,
+.v37-note{
+  border:1px solid rgba(185,144,60,.16);
+  border-radius:14px;
+  padding:10px;
+  background:#fffaf0;
+}
+.v37-grid span,
+.v37-note span{
+  display:block;
+  color:var(--green);
+  font-weight:700;
+  font-size:14px;
+}
+.v37-grid strong,
+.v37-note p{
+  margin:5px 0 0;
+  color:var(--brown);
+}
+.v37-note{
+  margin-top:10px;
+}
+.v37-footer{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:8px;
+  padding:12px;
+  border-top:1px solid rgba(185,144,60,.22);
+  background:#fffaf0;
+}
+.booking-card,.pending-card,.worklist-item{
+  cursor:pointer;
+}
+@media(max-width:900px){
+  .v37-body{grid-template-columns:1fr;}
+}
+@media(max-width:640px){
+  .v37-grid,.v37-footer{grid-template-columns:1fr 1fr;}
+}

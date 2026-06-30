@@ -2013,3 +2013,123 @@ async function v35DeleteBlock(id){if(!confirm("確定刪除這個休假／店休
 function v35PatchModalFooterSave(){const modal=document.getElementById("bookingModal");if(!modal)return;const observer=new MutationObserver(()=>{modal.querySelectorAll(".v3-modal-footer .primary").forEach(btn=>{if(btn.textContent.includes("儲存收銀"))btn.textContent="💾 儲存收銀／薪資";});modal.querySelectorAll(".v31-edit-actions .primary").forEach(btn=>{if(!btn.textContent.includes("💾"))btn.textContent="💾 儲存項目並釋放空檔";});});observer.observe(modal,{childList:true,subtree:true});}
 setTimeout(()=>{v35EnsureDateToolbar();v35EnsureBlocksPanelV2();v35PatchModalFooterSave();},1200);
 document.addEventListener("DOMContentLoaded",()=>{setTimeout(()=>{v35EnsureDateToolbar();v35EnsureBlocksPanelV2();v35PatchModalFooterSave();},1200);});
+
+
+/* =========================
+   CONSTONIC ADMIN V3.7
+   緊急修復：恢復後台按鍵與預約明細
+========================= */
+window.CONSTONIC_ADMIN_VERSION = "V3.7";
+
+function safeStatusTextV37(status){
+  if(status === "pending") return "待確認";
+  if(status === "confirmed") return "已確認";
+  if(status === "cancelled") return "已取消";
+  if(status === "completed") return "已完成";
+  if(status === "nail_request") return "美甲待確認";
+  return status || "待確認";
+}
+
+function safeRoomTextV37(room){
+  if(room === "VIP301-A") return "VIP301 床A";
+  if(room === "VIP301-B") return "VIP301 床B";
+  return room || "未指定";
+}
+
+function safeItemsV37(items){
+  return (items || []).map(function(i, idx){
+    return (idx+1) + ". " + escapeHtml(i.name || "-") + "（" + Number(i.duration || 0) + "分）" + (i.therapist ? "｜" + escapeHtml(i.therapist) : "");
+  }).join("<br>");
+}
+
+async function fetchBookingV37(id){
+  var local = (window.currentBookings || currentBookings || []).find(function(b){ return b.id === id; });
+  if(local) return local;
+  var result = await db.from("bookings").select("*").eq("id", id).single();
+  if(result.error){
+    console.error(result.error);
+    return null;
+  }
+  return result.data;
+}
+
+window.openBookingModal = async function(id){
+  var b = await fetchBookingV37(id);
+  if(!b){
+    alert("找不到這筆預約，請按更新行事曆後再試。");
+    return;
+  }
+
+  var modal = document.getElementById("bookingModal");
+  var body = document.getElementById("bookingModalBody");
+  if(!modal || !body){
+    alert("後台彈窗元件不存在，請確認 admin.html 已更新。");
+    return;
+  }
+
+  var nail = b.nail_request || null;
+  var checkout = b.checkout || {};
+  var room = checkout.room || "未指定";
+
+  body.innerHTML =
+    '<div class="v37-modal">' +
+      '<div class="v37-header">' +
+        '<div><p class="eyebrow">CONSTONIC ADMIN V3.7</p><h2>' + escapeHtml(b.customer_name || "-") + '｜' + escapeHtml(b.date || "") + ' ' + escapeHtml(b.slot || "") + '</h2></div>' +
+        '<button type="button" class="modal-close" onclick="closeBookingModal()">×</button>' +
+      '</div>' +
+      '<div class="v37-body">' +
+        '<section class="v37-panel">' +
+          '<h3>預約資料</h3>' +
+          '<div class="v37-grid">' +
+            '<div><span>日期時間</span><strong>' + escapeHtml(b.date || "-") + ' ' + escapeHtml(b.slot || "-") + '</strong></div>' +
+            '<div><span>姓名</span><strong>' + escapeHtml(b.customer_name || "-") + '</strong></div>' +
+            '<div><span>電話</span><strong>' + escapeHtml(b.phone || "-") + '</strong></div>' +
+            '<div><span>LINE</span><strong>' + escapeHtml(b.line_name || "-") + '</strong></div>' +
+            '<div><span>美容師</span><strong>' + escapeHtml(b.therapist || "-") + '</strong></div>' +
+            '<div><span>狀態</span><strong>' + safeStatusTextV37(b.status) + '</strong></div>' +
+            '<div><span>房型</span><strong>' + safeRoomTextV37(room) + '</strong></div>' +
+          '</div>' +
+          '<div class="v37-note"><span>預約項目</span><p>' + safeItemsV37(b.items) + '</p></div>' +
+          '<div class="v37-note"><span>時間保留</span><p>療程 ' + Number(b.service_minutes || 0) + ' 分｜整理 ' + Number(b.internal_buffer || 0) + ' 分｜保留 ' + Number(b.total_block || 0) + ' 分</p></div>' +
+          (nail ? '<div class="v37-note"><span>美甲申請</span><p>希望時段：' + escapeHtml(nail.preferred_period || "-") + '<br>指定時間：' + escapeHtml(nail.preferred_time || "-") + '<br>手部/足部：' + escapeHtml(nail.part || "-") + '<br>樣式：' + escapeHtml(nail.style || "-") + '<br>備註：' + escapeHtml(nail.nail_note || "-") + '</p></div>' : '') +
+          '<div class="v37-note"><span>備註</span><p>' + escapeHtml(b.note || "-") + '</p></div>' +
+        '</section>' +
+        '<section class="v37-panel">' +
+          '<h3>房型安排</h3>' +
+          '<select id="roomSelect">' +
+            ['未指定','201','202','203','VIP301-A','VIP301-B','VIP302'].map(function(r){ return '<option value="' + r + '" ' + (room === r ? 'selected' : '') + '>' + safeRoomTextV37(r) + '</option>'; }).join('') +
+          '</select>' +
+          '<button type="button" onclick="saveRoomV37(\\'' + escapeHtml(b.id) + '\\')">儲存房型</button>' +
+        '</section>' +
+      '</div>' +
+      '<div class="v37-footer">' +
+        '<button type="button" onclick="updateStatus(\\'' + escapeHtml(b.id) + '\\',\\'confirmed\\')">已確認</button>' +
+        '<button type="button" onclick="updateStatus(\\'' + escapeHtml(b.id) + '\\',\\'cancelled\\')">取消</button>' +
+        '<button type="button" onclick="deleteBooking(\\'' + escapeHtml(b.id) + '\\')">刪除</button>' +
+        '<button type="button" class="primary" onclick="closeBookingModal()">確定</button>' +
+      '</div>' +
+    '</div>';
+
+  modal.classList.remove("hidden");
+};
+
+window.saveRoomV37 = async function(id){
+  var select = document.getElementById("roomSelect");
+  var b = await fetchBookingV37(id);
+  if(!b) return;
+  var checkout = b.checkout || {};
+  checkout.room = select ? select.value : "未指定";
+  var result = await db.from("bookings").update({ checkout: checkout }).eq("id", id);
+  if(result.error){
+    alert("房型儲存失敗");
+    console.error(result.error);
+    return;
+  }
+  alert("房型已儲存");
+  closeBookingModal();
+  if(typeof renderBookings === "function") renderBookings();
+};
+
+document.addEventListener("DOMContentLoaded", function(){
+  console.log("CONSTONIC ADMIN V3.7 loaded");
+});
