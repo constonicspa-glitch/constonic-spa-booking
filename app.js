@@ -528,3 +528,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+
+/* =========================
+   CONSTONIC FRONT V3.5
+   前台選取明顯 + 美甲諮詢預約提示
+========================= */
+function v35IsNailSelected(){try{return (cart||[]).some(i=>i.category==="美甲設計"||String(i.therapist||"").includes("曼曼"));}catch(e){return false;}}
+function v35EnhanceFrontUI(){document.querySelectorAll(".service-card, .service-item, .slot-btn, .slot-button, .therapist-select").forEach(el=>{el.classList.add("v35-touch-target");});const nailCard=document.getElementById("nailRequestCard");const slotCard=document.getElementById("slotCard");if(nailCard&&slotCard){const isNail=v35IsNailSelected();nailCard.classList.toggle("hidden",!isNail);slotCard.classList.toggle("hidden",isNail);}if(v35IsNailSelected()){const msg=document.getElementById("slotList");if(msg){msg.innerHTML=`<div class="closed-day-message">美甲採諮詢預約制，請填寫希望時段、手部/足部、樣式與備註，店家會再確認正式時間。</div>`;}}}
+const v35OldRenderCart=typeof renderCart==="function"?renderCart:null;if(v35OldRenderCart){window.renderCart=function(){v35OldRenderCart();setTimeout(v35EnhanceFrontUI,100);};}
+const v35OldRenderSlots=typeof renderSlots==="function"?renderSlots:null;if(v35OldRenderSlots){window.renderSlots=function(){v35OldRenderSlots();setTimeout(v35EnhanceFrontUI,100);};}
+document.addEventListener("click",e=>{const btn=e.target.closest("button, .service-card, .service-item, .slot-btn, .slot-button");if(btn){setTimeout(v35EnhanceFrontUI,120);}});
+document.addEventListener("DOMContentLoaded",()=>setTimeout(v35EnhanceFrontUI,500));
