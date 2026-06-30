@@ -1078,3 +1078,20 @@ html, body{
 .worklist-item strong{
   word-break:break-word;
 }
+
+
+/* CONSTONIC ADMIN V3.4 */
+.v34-floating-list{
+  margin-top:16px;
+}
+.calendar-grid.staff-4{
+  grid-template-columns:90px repeat(4, minmax(180px,1fr));
+}
+#v34ExportBtn{
+  margin-left:auto;
+}
+@media(max-width:900px){
+  .calendar-grid.staff-4{
+    grid-template-columns:70px repeat(4, minmax(150px,1fr));
+  }
+}

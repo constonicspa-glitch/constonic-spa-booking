@@ -1749,3 +1749,244 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+
+
+/* =========================
+   CONSTONIC ADMIN V3.4
+   1. 付款方式新增扣儲值／扣課程／團購券／免收款／全支付
+   2. 月報 CSV 匯出，可用 Excel 開啟
+   3. 行事曆顯示未指定／異常美容師預約，避免前台有預約但後台看不到
+========================= */
+
+window.CONSTONIC_ADMIN_VERSION = "V3.4";
+
+const v34PaymentMethods = ["現金","刷卡","匯款","LINE Pay","街口支付","全支付","Apple Pay","Google Pay","扣儲值","扣課程","團購券","免收款","其他"];
+
+function v34NormalizeTherapist(name){
+  if(["雅潔老師","巧萱美容師","曼曼美甲師"].includes(name)) return name;
+  return "不指定";
+}
+
+function v34VisibleStaff(bookings, filter){
+  if(filter && filter !== "全部") return [filter];
+  const hasUnassigned = (bookings || []).some(b => !["雅潔老師","巧萱美容師","曼曼美甲師"].includes(b.therapist));
+  return hasUnassigned ? ["雅潔老師","巧萱美容師","曼曼美甲師","不指定"] : ["雅潔老師","巧萱美容師","曼曼美甲師"];
+}
+
+function v34TherapistClass(name){
+  if(typeof therapistClass === "function") return therapistClass(name);
+  return "therapist-none";
+}
+
+function v34StatusText(status){
+  if(typeof v3SafeStatus === "function") return v3SafeStatus(status);
+  if(typeof statusText === "function") return statusText(status);
+  return status || "待確認";
+}
+
+function v34Items(items, compact=false){
+  if(typeof formatItems === "function") return formatItems(items, compact);
+  return (items || []).map((i,idx)=>`${idx+1}. ${escapeHtml(i.name||"-")}（${Number(i.duration||0)}分）`).join("<br>");
+}
+
+/* 強制覆蓋行事曆渲染，補上「不指定」欄位 */
+window.renderBookings = async function(){
+  const user = typeof getCurrentUser === "function" ? getCurrentUser() : true;
+  if(!user) return;
+  const date = document.getElementById("date")?.value;
+  const mode = document.getElementById("viewMode")?.value || "calendar";
+  const filter = document.getElementById("therapistFilter")?.value || "全部";
+  const box = document.getElementById("calendarView");
+  const title = document.getElementById("calendarTitle");
+  if(!box || !date) return;
+
+  if(title) title.textContent = `${date} 行事曆`;
+  box.innerHTML = "載入中...";
+
+  let query = db.from("bookings").select("*").eq("date", date).order("slot", {ascending:true});
+  if(filter !== "全部") query = query.eq("therapist", filter);
+
+  const {data, error} = await query;
+  if(error){
+    box.innerHTML = '<p class="muted">讀取失敗，請確認 Supabase 設定。</p>';
+    console.error(error);
+    return;
+  }
+
+  const bookings = data || [];
+  currentBookings = bookings;
+
+  if(typeof renderStats === "function") await renderStats(date, bookings);
+
+  if(!bookings.length){
+    box.innerHTML = '<p class="muted">這一天目前沒有預約。</p>';
+    return;
+  }
+
+  if(mode === "list"){
+    box.innerHTML = bookings.map(b => typeof listBookingCard === "function" ? listBookingCard(b) : "").join("");
+    return;
+  }
+
+  const visibleStaff = v34VisibleStaff(bookings, filter);
+  let html = `<div class="calendar-grid staff-${visibleStaff.length}"><div class="calendar-head time-head">時間</div>`;
+  visibleStaff.forEach(s => html += `<div class="calendar-head ${v34TherapistClass(s)}">${escapeHtml(s)}</div>`);
+
+  for(let t=600; t<=1200; t+=30){
+    const label = typeof minutesToTime === "function" ? minutesToTime(t) : `${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`;
+    html += `<div class="time-cell">${label}</div>`;
+    visibleStaff.forEach(s => {
+      const matches = bookings.filter(b => v34NormalizeTherapist(b.therapist) === s && b.slot === label);
+      html += `<div class="calendar-cell droppable-slot" data-time="${label}" data-therapist="${escapeHtml(s)}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropBooking(event,'${label}','${escapeHtml(s)}')">${matches.map(b => typeof bookingCard === "function" ? bookingCard(b) : "").join("")}</div>`;
+    });
+  }
+
+  /* 補充：若有非標準時間，例如待確認，也集中顯示，避免消失 */
+  const nonTimeBookings = bookings.filter(b => !/^\d{2}:\d{2}$/.test(String(b.slot || "")));
+  if(nonTimeBookings.length){
+    html += `</div><div class="card v34-floating-list"><h3>未排入時間軸的預約</h3>${nonTimeBookings.map(b => typeof listBookingCard === "function" ? listBookingCard(b) : "").join("")}</div>`;
+  }else{
+    html += "</div>";
+  }
+
+  box.innerHTML = html;
+
+  if(typeof v33RenderPendingCenter === "function") v33RenderPendingCenter();
+  if(typeof v33RenderTodayWorklist === "function") v33RenderTodayWorklist();
+};
+
+function v34PaymentOptions(selected){
+  return v34PaymentMethods.map(v=>`<option ${selected===v?"selected":""}>${v}</option>`).join("");
+}
+
+/* 重新覆蓋收銀區，加入新的付款方式 */
+function v34CashierSection(b){
+  const c = typeof v3CheckoutDefaults === "function" ? v3CheckoutDefaults(b) : (b.checkout || {});
+  const t = typeof v3Totals === "function" ? v3Totals(c) : {tech30Bonus:0,tech40Bonus:0,productBonus:0,courseBonus:0,platformPay:0,salaryTotal:0};
+  const rows = (c.tech_rows || []).map((r,idx)=>`
+    <div class="v3-tech-row">
+      <div class="field"><label>項目</label><input id="v2TechName_${idx}" value="${escapeHtml(r.item_name||"")}"></div>
+      <div class="field"><label>金額</label><input id="v2TechAmount_${idx}" type="number" min="0" value="${Number(r.amount||0)}"></div>
+      <div class="field"><label>抽成</label><select id="v2TechRate_${idx}">
+        <option value="30" ${String(r.rate)==="30"?"selected":""}>30%</option>
+        <option value="40" ${String(r.rate)==="40"?"selected":""}>40%</option>
+      </select></div>
+    </div>`).join("");
+
+  return `<div class="v3-panel v3-cashier-panel">
+    <h3>收銀／薪資</h3>
+    <div class="v3-cashier-head">
+      <div class="field"><label>收款狀態</label><select id="v2PaymentStatus">${["已收款","部分收款","未收款"].map(v=>`<option ${c.payment_status===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label>收款方式</label><select id="v2PaymentMethod">${v34PaymentOptions(c.payment_method || "現金")}</select></div>
+    </div>
+
+    <details open class="v3-collapse">
+      <summary>技術服務</summary>
+      <div id="v2TechRows" data-count="${(c.tech_rows||[]).length}" class="v3-tech-list">${rows}</div>
+    </details>
+
+    <details class="v3-collapse">
+      <summary>商品／課程／儲值／平台</summary>
+      <div class="v3-money-grid">
+        <div class="field"><label>商品10%</label><input id="v2ProductAmount" type="number" min="0" value="${Number(c.product_amount||0)}"></div>
+        <div class="field"><label>新課程2%</label><input id="v2CourseAmount" type="number" min="0" value="${Number(c.course_amount||0)}"></div>
+        <div class="field"><label>新儲值2%</label><input id="v2StoredValueAmount" type="number" min="0" value="${Number(c.stored_value_new_amount||0)}"></div>
+        <div class="field"><label>平台固定</label><input id="v2PlatformPay" type="number" min="0" value="${Number(c.platform_fixed_pay||0)}"></div>
+        <div class="field"><label>本次實收</label><input id="v2TotalReceived" type="number" min="0" value="${Number(c.total_received||0)}"></div>
+        <div class="field"><label>發票</label><select id="v2InvoiceStatus">${["未開","已開","免開"].map(v=>`<option ${c.invoice_status===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      </div>
+      <div class="field"><label>備註</label><textarea id="v2ReceiptNote" rows="2">${escapeHtml(c.receipt_note||"")}</textarea></div>
+    </details>
+
+    <div class="v3-salary-card">
+      <div><span>技術30%</span><strong>NT$ ${v3Money(t.tech30Bonus)}</strong></div>
+      <div><span>技術40%</span><strong>NT$ ${v3Money(t.tech40Bonus)}</strong></div>
+      <div><span>商品10%</span><strong>NT$ ${v3Money(t.productBonus)}</strong></div>
+      <div><span>課程／儲值2%</span><strong>NT$ ${v3Money(t.courseBonus)}</strong></div>
+      <div><span>平台固定</span><strong>NT$ ${v3Money(t.platformPay)}</strong></div>
+      <div class="total"><span>本次薪資</span><strong>NT$ ${v3Money(t.salaryTotal)}</strong></div>
+    </div>
+  </div>`;
+}
+window.v3CashierSection = v34CashierSection;
+
+/* CSV 匯出，可用 Excel 開啟 */
+function v34CsvEscape(value){
+  const text = String(value ?? "").replaceAll('"','""');
+  return `"${text}"`;
+}
+
+function v34CheckoutCalc(c){
+  c = c || {};
+  const techRows = c.tech_rows || [];
+  const tech30Amount = techRows.filter(r=>String(r.rate)==="30").reduce((s,r)=>s+Number(r.amount||0),0);
+  const tech40Amount = techRows.filter(r=>String(r.rate)==="40").reduce((s,r)=>s+Number(r.amount||0),0);
+  const tech30Bonus = Math.round(tech30Amount*.3);
+  const tech40Bonus = Math.round(tech40Amount*.4);
+  const productBonus = Math.round(Number(c.product_amount||0)*.1);
+  const courseBonus = Math.round((Number(c.course_amount||0)+Number(c.stored_value_new_amount||0))*.02);
+  const platformPay = Number(c.platform_fixed_pay||0);
+  return {tech30Amount, tech40Amount, tech30Bonus, tech40Bonus, productBonus, courseBonus, platformPay, salaryTotal:tech30Bonus+tech40Bonus+productBonus+courseBonus+platformPay};
+}
+
+async function v34ExportMonthlyCSV(){
+  const dateValue = document.getElementById("date")?.value || new Date().toISOString().slice(0,10);
+  const ym = dateValue.slice(0,7);
+  const y = Number(ym.slice(0,4));
+  const m = Number(ym.slice(5,7));
+  const last = new Date(y,m,0).getDate();
+  const start = `${ym}-01`;
+  const end = `${ym}-${String(last).padStart(2,"0")}`;
+
+  const {data,error} = await db.from("bookings").select("*").gte("date", start).lte("date", end).order("date", {ascending:true}).order("slot", {ascending:true});
+  if(error){
+    alert("匯出失敗，請稍後再試");
+    console.error(error);
+    return;
+  }
+
+  const headers = ["日期","時間","客戶姓名","電話","美容師","狀態","房型","預約項目","收款狀態","收款方式","本次實收","技術30金額","技術30獎金","技術40金額","技術40獎金","商品金額","商品10%","新課程金額","新儲值金額","課程/儲值2%","平台固定","本次薪資","發票","備註"];
+  const lines = [headers.map(v34CsvEscape).join(",")];
+
+  (data || []).forEach(b=>{
+    const c = b.checkout || {};
+    const calc = v34CheckoutCalc(c);
+    const itemText = (b.items || []).map(i=>`${i.name || ""}(${i.duration || 0}分)`).join(" / ");
+    const row = [
+      b.date,b.slot,b.customer_name,b.phone,b.therapist,v34StatusText(b.status),c.room || "",
+      itemText,c.payment_status || "",c.payment_method || "",c.total_received || 0,
+      calc.tech30Amount,calc.tech30Bonus,calc.tech40Amount,calc.tech40Bonus,
+      c.product_amount || 0,calc.productBonus,c.course_amount || 0,c.stored_value_new_amount || 0,calc.courseBonus,
+      calc.platformPay,calc.salaryTotal,c.invoice_status || "",c.receipt_note || ""
+    ];
+    lines.push(row.map(v34CsvEscape).join(","));
+  });
+
+  const csv = "\ufeff" + lines.join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `康姿多儷SPA_${ym}_月報.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function v34EnsureExportButton(){
+  const card = document.getElementById("monthlyReportCard");
+  if(!card || document.getElementById("v34ExportBtn")) return;
+  const btn = document.createElement("button");
+  btn.id = "v34ExportBtn";
+  btn.type = "button";
+  btn.className = "primary";
+  btn.textContent = "匯出本月 Excel";
+  btn.onclick = v34ExportMonthlyCSV;
+  const row = card.querySelector(".report-title-row") || card;
+  row.appendChild(btn);
+}
+
+setTimeout(v34EnsureExportButton, 1500);
+document.addEventListener("DOMContentLoaded", () => setTimeout(v34EnsureExportButton, 1600));
