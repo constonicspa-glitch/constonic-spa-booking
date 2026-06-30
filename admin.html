@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>康姿多儷 SPA 行事曆後台</title>
+  <title>康姿多儷 SPA 行事曆後台 V4.0</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -12,70 +12,86 @@
     <header class="brand-header">
       <div class="logo-mark">牡丹</div>
       <div>
-        <p class="eyebrow">CONSTONIC Beauty Center</p>
-        <h1>康姿多儷 SPA 行事曆後台 <span class="version-badge">V3.7</span></h1>
-        <p class="subtitle">美容師帳號登入｜三位皆可查看全部預約｜行事曆管理｜後台 V3.7</p>
+        <p class="eyebrow">CONSTONIC BEAUTY CENTER</p>
+        <h1>康姿多儷 SPA 行事曆後台 <span class="version-badge">V4.0</span></h1>
+        <p class="subtitle">美容師帳號登入｜預約管理｜房型｜收銀｜店休</p>
       </div>
     </header>
 
     <section class="card notice" id="loginCard">
       <h2>後台登入</h2>
-      <div class="field">
-        <label for="username">帳號</label>
-        <input id="username" placeholder="請輸入帳號">
-      </div>
-      <div class="field">
-        <label for="password">密碼</label>
-        <input id="password" type="password" placeholder="請輸入密碼">
-      </div>
-      <button class="primary" onclick="login()">登入後台</button>
+      <div class="field"><label>帳號</label><input id="username" placeholder="請輸入帳號" autocomplete="username" /></div>
+      <div class="field"><label>密碼</label><input id="password" type="password" placeholder="請輸入密碼" autocomplete="current-password" /></div>
+      <button class="primary" type="button" onclick="login()">登入後台</button>
       <p id="loginMessage" class="hint"></p>
     </section>
 
     <main id="adminMain" class="hidden">
-      <section class="card">
-        <h2 id="welcomeTitle">行事曆查詢</h2>
+      <section class="card admin-toolbar-card">
+        <div class="toolbar-top">
+          <div>
+            <h2 id="welcomeTitle">後台行事曆</h2>
+            <p class="hint">選擇日期後可查看當日預約與待確認資料。</p>
+          </div>
+          <button type="button" onclick="logout()">登出</button>
+        </div>
         <div class="form-grid">
           <div class="field">
-            <label for="date">選擇日期</label>
-            <input type="date" id="date">
+            <label>選擇日期</label>
+            <input type="date" id="date" />
+            <div class="date-toolbar">
+              <button type="button" onclick="changeDate(-1)">◀ 前一天</button>
+              <button type="button" onclick="goToday()">今天</button>
+              <button type="button" onclick="changeDate(1)">下一天 ▶</button>
+              <strong id="dateLabel" class="date-label"></strong>
+            </div>
           </div>
-          <div class="field">
-            <label for="therapistFilter">美容師</label>
-            <select id="therapistFilter">
-              <option value="全部">全部</option>
-              <option value="雅潔老師">雅潔老師</option>
-              <option value="巧萱美容師">巧萱美容師</option>
-              <option value="曼曼美甲師">曼曼美甲師</option>
-              <option value="不指定">不指定</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="viewMode">檢視模式</label>
-            <select id="viewMode">
-              <option value="day">單日行事曆</option>
-              <option value="list">列表模式</option>
-            </select>
-          </div>
+          <div class="field"><label>美容師</label><select id="therapistFilter"><option>全部</option><option>雅潔老師</option><option>巧萱美容師</option><option>曼曼美甲師</option><option>不指定</option></select></div>
+          <div class="field"><label>檢視模式</label><select id="viewMode"><option value="calendar">單日行事曆</option><option value="list">列表模式</option></select></div>
         </div>
-        <button class="primary" onclick="renderBookings()">更新行事曆</button>
-        <button onclick="logout()">登出</button>
+        <button class="primary" type="button" onclick="refreshAll()">更新行事曆</button>
       </section>
-      <section class="card">
+
+      <section class="card dashboard-card">
+        <h2>今日工作清單／未收銀提醒</h2>
+        <div id="adminStats" class="stat-grid"></div>
+        <div id="todayWorklistContent" class="today-worklist muted">載入中...</div>
+      </section>
+
+      <section class="card pending-card-wrap">
         <h2>待確認中心</h2>
         <div id="pendingCenter" class="pending-center muted">載入中...</div>
       </section>
-      <section class="card">
-        <h2 id="calendarTitle">今日行事曆</h2>
-        <div id="adminStats" class="stats-grid"></div>
-        <div id="calendarView"></div>
+
+      <section class="card calendar-card">
+        <div class="report-title-row"><h2 id="calendarTitle">今日行事曆</h2><button type="button" onclick="refreshAll()">更新</button></div>
+        <div id="calendarView" class="calendar-view muted">載入中...</div>
+      </section>
+
+      <section class="card" id="bookingBlocksCard">
+        <h2>店休／個人休假</h2>
+        <p class="hint">可設定連續日期，也可輸入多個分開日期。全店店休選「全店」，個人休假選美容師。</p>
+        <div class="tabs-lite"><label><input type="radio" name="blockMode" value="range" checked /> 連續日期</label><label><input type="radio" name="blockMode" value="multi" /> 分開日期</label></div>
+        <div class="form-grid">
+          <div class="field block-range"><label>開始日期</label><input type="date" id="blockStart" /></div>
+          <div class="field block-range"><label>結束日期</label><input type="date" id="blockEnd" /></div>
+          <div class="field block-multi hidden"><label>分開日期</label><textarea id="blockDates" rows="3" placeholder="例如：2026-07-01、2026-07-05、2026-07-12"></textarea></div>
+          <div class="field"><label>關閉對象</label><select id="blockTherapist"><option>全店</option><option>雅潔老師</option><option>巧萱美容師</option><option>曼曼美甲師</option></select></div>
+          <div class="field"><label>原因</label><input id="blockReason" placeholder="例如：公休、課程日、老師休假" /></div>
+        </div>
+        <button class="primary" type="button" onclick="createBlocks()">新增休假／店休</button>
+        <div id="blocksContent" class="booking-blocks-list muted">載入中...</div>
+      </section>
+
+      <section class="card" id="monthlyReportCard">
+        <div class="report-title-row"><h2>本月收銀／薪資統計</h2><button type="button" onclick="renderMonthlyReport()">更新統計</button><button class="primary" type="button" onclick="exportMonthlyCSV()">匯出本月 Excel</button></div>
+        <div id="monthlyReportContent" class="muted">載入中...</div>
       </section>
     </main>
   </div>
+
   <div id="bookingModal" class="modal hidden">
-    <div class="modal-content booking-modal-content">
-      <button type="button" class="modal-close" onclick="closeBookingModal()">×</button>
-      <h2>預約完整資料</h2>
+    <div class="modal-content wide-modal">
       <div id="bookingModalBody"></div>
     </div>
   </div>

@@ -12,127 +12,80 @@
     <header class="brand-header">
       <div class="logo-mark">牡丹</div>
       <div>
-        <p class="eyebrow">CONSTONIC Beauty Center</p>
+        <p class="eyebrow">CONSTONIC BEAUTY CENTER</p>
         <h1>康姿多儷 SPA 線上預約</h1>
-        <p class="subtitle">可一次預約多項療程｜送出後店家將於營業時間確認</p>
+        <p class="subtitle">請依序選擇療程與日期，實際預約由店家再次確認。</p>
       </div>
     </header>
 
-    <section class="card notice">
-      <h2>預約提醒</h2>
-      <p>週一～週五 10:00–20:00｜週六 10:00–18:00｜週日店休。</p>
-      <p>可一次加入多個療程，最後只需填寫一次資料。身體按摩指定雅潔老師加收 300 元。</p>
-      <p>由於服務項目眾多，如不確定適合的療程，歡迎電話預約洽詢：06-2723611。</p>
-    </section>
-
-    <section class="grid">
-      <div class="card">
-        <h2>1. 選擇服務分類</h2>
+    <main>
+      <section class="card">
+        <h2>1. 選擇療程類別</h2>
         <div id="categoryButtons" class="button-grid"></div>
-      </div>
-      <div class="card">
+      </section>
+
+      <section class="card">
         <h2>2. 選擇療程</h2>
-        <div id="serviceList" class="service-list muted">請先選擇服務分類</div>
-      </div>
-    </section>
+        <div id="serviceList" class="service-list muted">請先選擇療程類別。</div>
+      </section>
 
-    <section class="card">
-      <h2>3. 本次預約清單</h2>
-      <div id="cartList" class="muted">尚未加入療程</div>
-      <div id="cartTotal" class="summary muted">請先加入至少一項療程</div>
-      <button type="button" onclick="clearCart()">清空預約清單</button>
-    </section>
+      <section class="card">
+        <h2>3. 本次預約清單</h2>
+        <div id="cartList" class="cart-list muted">尚未加入療程。</div>
+        <div id="teacherFee" class="hint"></div>
+        <div id="cartTotal" class="summary-total"></div>
+        <button type="button" onclick="clearCart()">清空預約清單</button>
+      </section>
 
-    <section class="grid">
-      <div class="card">
-        <h2>4. 個別指定服務人員</h2>
-        <p class="hint">請先加入療程，系統會在「本次預約清單」中讓您依每個項目選擇可服務的美容師／美甲師。</p>
-        <p id="teacherFee" class="hint"></p>
-      </div>
-      <div class="card">
-        <h2>5. 選擇日期</h2>
-        <div class="field">
-          <label for="date">預約日期</label>
-          <input type="date" id="date" />
-        </div>
-      </div>
-    </section>
-
-    <section class="card hidden" id="nailRequestCard">
-      <h2>6. 美甲預約申請</h2>
-      <p class="hint">美甲服務採人工確認制，請先填寫希望時間與需求，店家將再與您確認正式預約時間。</p>
-      <div class="form-grid">
-        <div class="field">
-          <label for="nailPreferredPeriod">希望時段</label>
-          <select id="nailPreferredPeriod">
-            <option>上午</option>
-            <option>下午</option>
-            <option>晚上</option>
-            <option>指定時間</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="nailPreferredTime">指定時間／可接受時間</label>
-          <input id="nailPreferredTime" placeholder="例如：14:00左右、下午都可以">
-        </div>
-        <div class="field">
-          <label for="nailPart">手部或足部</label>
-          <select id="nailPart">
-            <option>手部</option>
-            <option>足部</option>
-            <option>手足皆要</option>
-            <option>不確定</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="nailStyle">項目樣式</label>
-          <select id="nailStyle">
-            <option>單色</option>
-            <option>造型</option>
-            <option>單純卸甲</option>
-            <option>保養</option>
-            <option>不確定</option>
-          </select>
-        </div>
-      </div>
-      <div class="field">
-        <label for="nailNote">美甲備註</label>
-        <textarea id="nailNote" rows="3" placeholder="例如：有卸甲、想做法式、想貼鑽、甲面狀況等"></textarea>
-      </div>
-    </section>
-
-    <section class="card" id="slotCard">
-      <h2>6. 選擇可預約時段</h2>
-      <div id="slotList" class="slot-list muted">請先加入療程並選擇日期</div>
-    </section>
-
-    <section class="card">
-      <h2>7. 填寫預約資料</h2>
-      <form id="bookingForm">
+      <section class="card hidden" id="nailRequestCard">
+        <h2>4. 美甲諮詢預約</h2>
+        <p class="hint">美甲時間會依照款式與卸甲狀況調整，請填寫希望時段，店家會再確認正式時間。</p>
         <div class="form-grid">
-          <div class="field"><label for="name">姓名</label><input id="name" required placeholder="請輸入姓名"></div>
-          <div class="field"><label for="phone">電話</label><input id="phone" required placeholder="09xx-xxx-xxx"></div>
-          <div class="field"><label for="lineName">LINE 名稱</label><input id="lineName" placeholder="方便店家確認"></div>
-          <div class="field"><label for="firstVisit">是否第一次來店</label><select id="firstVisit"><option>是</option><option>否</option></select></div>
+          <div class="field"><label>希望時段</label><select id="nailPreferredPeriod"><option>上午</option><option>下午</option><option>晚上</option></select></div>
+          <div class="field"><label>希望時間</label><input id="nailPreferredTime" placeholder="例如：14:00 後都可以" /></div>
+          <div class="field"><label>手部／足部</label><select id="nailPart"><option>手部</option><option>足部</option><option>手足皆可</option></select></div>
+          <div class="field"><label>樣式</label><select id="nailStyle"><option>單色</option><option>造型</option><option>卸甲</option><option>保養</option><option>其他</option></select></div>
         </div>
-        <div class="field"><label for="note">備註</label><textarea id="note" rows="3" placeholder="例如：想加強肩頸、敏感肌、需避開精油等"></textarea></div>
-        <div id="summary" class="summary muted">尚未選擇完整預約內容</div>
-        <button id="submitBtn" class="primary" type="submit">送出預約</button>
-        <p id="formMessage" class="hint"></p>
-      </form>
-    </section>
+        <div class="field"><label>美甲備註</label><textarea id="nailNote" rows="3" placeholder="可填寫想做的款式、是否卸甲、特殊需求"></textarea></div>
+      </section>
+
+      <section class="card">
+        <h2>5. 選擇日期</h2>
+        <div class="field"><label>預約日期</label><input type="date" id="date" /></div>
+      </section>
+
+      <section class="card" id="slotCard">
+        <h2>6. 選擇可預約時段</h2>
+        <div id="slotList" class="slot-list muted">請先加入療程並選擇日期。</div>
+      </section>
+
+      <section class="card">
+        <h2>7. 填寫聯絡資料</h2>
+        <form id="bookingForm">
+          <div class="form-grid">
+            <div class="field"><label>姓名</label><input id="name" required /></div>
+            <div class="field"><label>電話</label><input id="phone" required /></div>
+            <div class="field"><label>LINE</label><input id="lineName" placeholder="可填 LINE 名稱或 ID" /></div>
+            <div class="field"><label>第一次來店</label><select id="firstVisit"><option>是</option><option>否</option></select></div>
+          </div>
+          <div class="field"><label>備註</label><textarea id="note" rows="3"></textarea></div>
+          <div id="summary" class="summary-box"></div>
+          <button id="submitBtn" type="submit" class="primary">送出預約</button>
+          <p id="formMessage" class="hint"></p>
+        </form>
+      </section>
+    </main>
   </div>
 
   <div id="successModal" class="modal hidden">
-    <div class="modal-content">
-      <h2>預約已送出</h2>
-      <p>感謝您的預約，我們將於營業時間再次確認。</p>
+    <div class="modal-content success-content">
+      <h2>✓ 預約送出成功</h2>
+      <p>已送出預約申請，店家會再確認正式時間。</p>
       <div id="successDetail"></div>
-      <button onclick="closeModal()" class="primary">完成</button>
+      <button type="button" class="primary" onclick="location.reload()">回首頁</button>
     </div>
   </div>
 
-  <footer>康姿多儷 SPA 國際教育學苑｜CONSTONIC Beauty Center</footer>
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
