@@ -363,3 +363,219 @@ function init(){
   if(getCurrentUser()) showAdmin();
 }
 document.addEventListener("DOMContentLoaded", init);
+
+
+/* =========================
+   CONSTONIC V4.1
+   拆分療程排程修正：
+   - 同一筆預約不同療程可分配不同美容師
+   - 行事曆依每個療程項目顯示
+   - 支援非半點時間
+   - 技術薪資支援固定薪資
+========================= */
+
+window.CONSTONIC_VERSION = "V4.1";
+
+function v41Pad(n){return String(n).padStart(2,"0");}
+function v41TimeToMin(t){
+  const m = String(t||"").match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return Number(m[1])*60 + Number(m[2]);
+}
+function v41MinToTime(m){return v41Pad(Math.floor(m/60))+":"+v41Pad(m%60);}
+function v41ValidTime(t){return v41TimeToMin(t) !== null;}
+function v41ItemStart(booking, idx){
+  const base = v41TimeToMin(booking.slot);
+  if(base === null) return booking.slot || "";
+  let offset = 0;
+  const items = booking.items || [];
+  for(let i=0;i<idx;i++) offset += Number(items[i].duration || 0);
+  return v41MinToTime(base + offset);
+}
+function v41ItemEnd(booking, idx){
+  const start = v41TimeToMin(v41ItemStart(booking, idx));
+  if(start === null) return "";
+  const item = (booking.items || [])[idx] || {};
+  return v41MinToTime(start + Number(item.duration || 0));
+}
+function v41NormalizeStaff(t){
+  if(["雅潔老師","巧萱美容師","曼曼美甲師"].includes(t)) return t;
+  return "不指定";
+}
+function v41StaffList(bookings, filter){
+  if(filter && filter !== "全部") return [filter];
+  const base = ["雅潔老師","巧萱美容師","曼曼美甲師"];
+  const hasOther = (bookings||[]).some(b => (b.items||[]).some(i => !base.includes(i.therapist || b.therapist)));
+  return hasOther ? [...base, "不指定"] : base;
+}
+function v41BuildSegments(bookings){
+  const segments = [];
+  (bookings || []).forEach(b => {
+    const items = b.items || [];
+    if(!items.length){
+      segments.push({booking:b, item:null, idx:0, staff:v41NormalizeStaff(b.therapist), start:b.slot, duration:Number(b.total_block||b.service_minutes||0), title:b.customer_name||"-"});
+      return;
+    }
+    items.forEach((item, idx) => {
+      const staff = v41NormalizeStaff(item.therapist || b.therapist);
+      const start = v41ItemStart(b, idx);
+      segments.push({
+        booking:b,
+        item,
+        idx,
+        staff,
+        start,
+        duration:Number(item.duration || 0),
+        title:b.customer_name||"-",
+        status:b.status
+      });
+    });
+  });
+  return segments;
+}
+function v41SegmentCard(seg){
+  const b = seg.booking;
+  const item = seg.item || {};
+  const status = typeof statusText === "function" ? statusText(b.status) : b.status;
+  const cls = typeof therapistClass === "function" ? therapistClass(seg.staff) : "";
+  return `<div class="booking-card v41-segment-card ${cls}" draggable="true" ondragstart="dragBooking(event,'${escapeHtml(b.id)}')" onclick="openBookingModal('${escapeHtml(b.id)}')">
+    <div class="booking-color-strip"></div>
+    <strong>${escapeHtml(seg.start)}｜${escapeHtml(b.customer_name || "-")}</strong>
+    <div>${seg.idx+1}. ${escapeHtml(item.name || "-")}（${Number(item.duration||0)}分）</div>
+    <div class="hint">${escapeHtml(seg.staff)}｜${status}</div>
+  </div>`;
+}
+
+/* 覆蓋行事曆：用療程項目作為顯示單位 */
+window.renderBookings = async function(){
+  const date = document.getElementById("date")?.value;
+  const mode = document.getElementById("viewMode")?.value || "calendar";
+  const filter = document.getElementById("therapistFilter")?.value || "全部";
+  const box = document.getElementById("calendarView");
+  const title = document.getElementById("calendarTitle");
+  if(!date || !box) return;
+
+  if(title) title.textContent = `${date} 行事曆`;
+  box.innerHTML = "載入中...";
+
+  let q = db.from("bookings").select("*").eq("date", date).order("slot", {ascending:true});
+  const {data,error} = await q;
+  if(error){
+    box.innerHTML = "<p class='muted'>讀取失敗。</p>";
+    console.error(error);
+    return;
+  }
+  const bookings = data || [];
+  window.currentBookings = bookings;
+
+  if(typeof renderStats === "function") renderStats(date, bookings);
+  if(typeof renderPendingCenter === "function") renderPendingCenter();
+  if(typeof renderTodayWorklist === "function") renderTodayWorklist();
+
+  if(!bookings.length){
+    box.innerHTML = "<p class='muted'>這一天目前沒有預約。</p>";
+    return;
+  }
+
+  const staffList = v41StaffList(bookings, filter);
+  const segments = v41BuildSegments(bookings).filter(s => filter === "全部" || s.staff === filter);
+
+  if(mode === "list"){
+    box.innerHTML = bookings.map(b => typeof listBookingCard === "function" ? listBookingCard(b) : "").join("");
+    return;
+  }
+
+  const timeSet = new Set();
+  for(let t=600;t<=1200;t+=30) timeSet.add(v41MinToTime(t));
+  segments.forEach(s => { if(v41ValidTime(s.start)) timeSet.add(s.start); });
+  const times = Array.from(timeSet).sort((a,b)=>v41TimeToMin(a)-v41TimeToMin(b));
+
+  let html = `<div class="calendar-grid staff-${staffList.length}"><div class="calendar-head time-head">時間</div>`;
+  staffList.forEach(s => html += `<div class="calendar-head ${typeof therapistClass==="function"?therapistClass(s):""}">${escapeHtml(s)}</div>`);
+
+  times.forEach(label => {
+    html += `<div class="time-cell">${label}</div>`;
+    staffList.forEach(staff => {
+      const matches = segments.filter(s => s.staff === staff && s.start === label);
+      html += `<div class="calendar-cell droppable-slot" data-time="${label}" data-therapist="${escapeHtml(staff)}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropBooking(event,'${label}','${escapeHtml(staff)}')">${matches.map(v41SegmentCard).join("")}</div>`;
+    });
+  });
+  html += "</div>";
+  box.innerHTML = html;
+};
+
+/* 儲存預約項目：重算總時間，並讓行事曆依項目拆分 */
+window.v41CollectEditItems = function(){
+  const box = document.getElementById("editItemsBox") || document.getElementById("v31ItemRows");
+  if(!box) return null;
+  const rows = Array.from(box.querySelectorAll(".edit-item-row,.v31-item-row"));
+  if(!rows.length) return null;
+  return rows.map((row, idx) => {
+    const inputs = row.querySelectorAll("input");
+    const selects = row.querySelectorAll("select");
+    const name = inputs[0]?.value?.trim() || "";
+    const duration = Number(inputs[1]?.value || 0);
+    const therapist = selects[0]?.value || "不指定";
+    return {name, duration, therapist};
+  }).filter(i => i.name && i.duration > 0);
+};
+
+window.saveEditItems = async function(id){
+  const items = v41CollectEditItems();
+  if(!items || !items.length){ alert("至少要保留一個療程項目"); return; }
+  const service = items.reduce((s,i)=>s+Number(i.duration||0),0);
+  const buffer = service <= 60 ? 10 : 20;
+  const primary = items[0].therapist || "不指定";
+  const {error} = await db.from("bookings").update({
+    items,
+    service_minutes: service,
+    internal_buffer: buffer,
+    total_block: service + buffer,
+    therapist: primary
+  }).eq("id", id);
+  if(error){ alert("儲存項目失敗"); console.error(error); return; }
+  alert("已儲存項目，行事曆與前台空檔會依新時間重新計算。");
+  closeBookingModal();
+  renderBookings();
+};
+window.v31SaveBookingItems = saveEditItems;
+
+/* 固定薪資：重新計算收銀 */
+function v41CalcSalary(checkout){
+  const rows = checkout.tech_rows || [];
+  let tech30=0, tech40=0, fixed=0;
+  rows.forEach(r => {
+    const amount = Number(r.amount || 0);
+    const rate = String(r.rate || "30");
+    if(rate === "30") tech30 += Math.round(amount * 0.3);
+    else if(rate === "40") tech40 += Math.round(amount * 0.4);
+    else if(rate === "fixed") fixed += amount;
+  });
+  const product = Math.round(Number(checkout.product_amount||0)*0.1);
+  const course = Math.round((Number(checkout.course_amount||0)+Number(checkout.stored_value_new_amount||0))*0.02);
+  const platform = Number(checkout.platform_fixed_pay||0);
+  return {tech30, tech40, fixed, product, course, platform, total:tech30+tech40+fixed+product+course+platform};
+}
+
+/* 若原本彈窗存在，補強固定薪資選項 */
+document.addEventListener("change", e => {
+  if(e.target && e.target.id && e.target.id.includes("TechRate")){
+    const opt = Array.from(e.target.options).some(o => o.value === "fixed");
+    if(!opt){
+      const o = document.createElement("option");
+      o.value = "fixed"; o.textContent = "固定薪資";
+      e.target.appendChild(o);
+    }
+  }
+}, true);
+
+setTimeout(() => {
+  document.querySelectorAll('select[id*="TechRate"]').forEach(sel => {
+    if(!Array.from(sel.options).some(o => o.value === "fixed")){
+      const o = document.createElement("option");
+      o.value = "fixed";
+      o.textContent = "固定薪資";
+      sel.appendChild(o);
+    }
+  });
+}, 1000);

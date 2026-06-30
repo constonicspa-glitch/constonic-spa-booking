@@ -540,3 +540,39 @@ const v35OldRenderCart=typeof renderCart==="function"?renderCart:null;if(v35OldR
 const v35OldRenderSlots=typeof renderSlots==="function"?renderSlots:null;if(v35OldRenderSlots){window.renderSlots=function(){v35OldRenderSlots();setTimeout(v35EnhanceFrontUI,100);};}
 document.addEventListener("click",e=>{const btn=e.target.closest("button, .service-card, .service-item, .slot-btn, .slot-button");if(btn){setTimeout(v35EnhanceFrontUI,120);}});
 document.addEventListener("DOMContentLoaded",()=>setTimeout(v35EnhanceFrontUI,500));
+
+
+/* =========================
+   CONSTONIC FRONT V4.1
+   前台空檔依每個療程服務人員分段計算
+========================= */
+function v41FrontTimeToMin(t){
+  const m = String(t||"").match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return Number(m[1])*60+Number(m[2]);
+}
+function v41FrontMinToTime(m){return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
+function v41FrontSegments(bookings){
+  const segs = [];
+  (bookings||[]).filter(b=>b.status!=="cancelled").forEach(b=>{
+    const base = v41FrontTimeToMin(b.slot);
+    if(base === null) return;
+    let offset = 0;
+    (b.items||[]).forEach(item=>{
+      const dur = Number(item.duration||0);
+      segs.push({
+        therapist:item.therapist || b.therapist || "不指定",
+        start:base+offset,
+        end:base+offset+dur
+      });
+      offset += dur;
+    });
+  });
+  return segs;
+}
+function v41FrontIsBusy(segs, therapist, start, end){
+  return segs.some(s=>{
+    if(s.therapist !== therapist) return false;
+    return start < s.end && end > s.start;
+  });
+}
