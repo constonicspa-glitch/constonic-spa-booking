@@ -309,3 +309,15 @@ footer{text-align:center;color:#8a765a;padding:28px;letter-spacing:1px}
 .booking-modal-content{position:relative;width:min(760px,96vw)}
 .modal-close{position:absolute;right:18px;top:14px;width:40px;height:40px;border-radius:50%;padding:0;font-size:24px;line-height:1}
 @media(max-width:760px){.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* 後台：手動整理時間調整 */
+.buffer-edit-field{
+  margin-top:14px;
+  padding:14px;
+  border:1px solid rgba(185,144,60,.28);
+  border-radius:18px;
+  background:rgba(255,253,248,.68);
+}
+.buffer-edit-field input{max-width:180px;}
+.buffer-edit-field button{width:auto;margin-top:8px;}

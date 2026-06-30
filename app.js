@@ -250,6 +250,16 @@ function isTherapistBusy(therapist,start,end){
   });
 }
 
+function isSameLocalDate(dateStr){
+  const now = new Date();
+  return dateStr === now.toISOString().slice(0,10);
+}
+function currentMinutesRoundedUp(){
+  const now = new Date();
+  const min = now.getHours()*60 + now.getMinutes();
+  return Math.ceil(min/30)*30;
+}
+
 function renderSlots(){
   const date=$("date").value,slotList=$("slotList");
   slotList.innerHTML="";
@@ -267,7 +277,9 @@ function renderSlots(){
   slotList.className="slot-list";
   const maxBlock=Math.max(...cart.map(itemBlock));
   const latestStart=cfgDay.close-maxBlock-20;
+  const todayCutoff = isSameLocalDate(date) ? currentMinutesRoundedUp() : cfgDay.open;
   for(let time=cfgDay.open;time<=latestStart;time+=30){
+    if(time < todayCutoff) continue;
     let busy=false;
     for(const item of cart){
       const start=time;
@@ -293,6 +305,10 @@ function renderSlots(){
       }
     }
     slotList.appendChild(btn);
+  }
+  if(slotList.children.length===0){
+    slotList.textContent="今天目前已無可預約空檔，請選擇其他日期或電話洽詢 06-2723611。";
+    slotList.className="slot-list muted";
   }
 }
 
@@ -372,6 +388,5 @@ function closeModal(){
 
 renderCategories();
 renderCart();
-const today=new Date();
-today.setDate(today.getDate()+1);
-$("date").min=today.toISOString().slice(0,10);
+const today = new Date();
+$("date").min = today.toISOString().slice(0,10);

@@ -169,6 +169,21 @@ function openBookingModal(id) {
   $("bookingModal").classList.remove("hidden");
 }
 function closeBookingModal() { $("bookingModal").classList.add("hidden"); }
+
+async function updateBuffer(id){
+  const input = document.getElementById("bufferInput");
+  if(!input) return;
+  const internal_buffer = Number(input.value || 0);
+  if(internal_buffer < 0){ alert("整理時間不可小於 0 分鐘"); return; }
+  const booking = currentBookings.find(b => b.id === id);
+  const service_minutes = Number(booking?.service_minutes || 0);
+  const total_block = service_minutes + internal_buffer;
+  const { error } = await db.from("bookings").update({ internal_buffer, total_block }).eq("id", id);
+  if(error){ alert("整理時間更新失敗"); console.error(error); return; }
+  closeBookingModal();
+  renderBookings();
+}
+
 async function updateStatus(id, status) {
   const {error} = await db.from("bookings").update({status}).eq("id", id);
   if (error) { alert("更新失敗"); console.error(error); }
