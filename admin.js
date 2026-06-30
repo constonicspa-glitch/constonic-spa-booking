@@ -911,3 +911,104 @@ if(typeof v2OriginalRenderBookings === "function"){
 }
 
 setTimeout(()=>{ v2RenderTodayWorklist(); }, 800);
+
+
+
+/* =========================
+   CONSTONIC V2.1 BOOKING BLOCKS
+   一鍵關閉預約日 / 美容師休假
+========================= */
+
+const BLOCK_THERAPISTS = ["全店", "雅潔老師", "巧萱美容師", "曼曼美甲師"];
+
+async function v21LoadBlocks(){
+  const box = document.getElementById("bookingBlocksContent");
+  if(!box) return;
+  const dateValue = document.getElementById("blockDate")?.value || document.getElementById("date")?.value || new Date().toISOString().slice(0,10);
+  const { data, error } = await db.from("booking_blocks").select("*").eq("date", dateValue).order("created_at", { ascending:false });
+  if(error){
+    box.innerHTML = "讀取關閉日失敗，請確認 Supabase 已執行 V2.1 SQL。";
+    console.error(error);
+    return;
+  }
+  const rows = data || [];
+  if(!rows.length){
+    box.innerHTML = "這一天沒有關閉設定。";
+    return;
+  }
+  box.innerHTML = rows.map(b => `<div class="block-row">
+    <div><strong>${escapeHtml(b.date)}</strong>｜${escapeHtml(b.therapist || "全店")}｜${escapeHtml(b.reason || "休假/不開放")}</div>
+    <button type="button" onclick="v21DeleteBlock('${escapeHtml(b.id)}')">刪除</button>
+  </div>`).join("");
+}
+
+async function v21CreateBlock(){
+  const date = document.getElementById("blockDate")?.value || document.getElementById("date")?.value;
+  const therapist = document.getElementById("blockTherapist")?.value || "全店";
+  const reason = document.getElementById("blockReason")?.value || "休假/不開放";
+  if(!date){
+    alert("請先選擇日期");
+    return;
+  }
+  const { error } = await db.from("booking_blocks").insert({
+    date,
+    therapist,
+    reason,
+    all_day: true
+  });
+  if(error){
+    alert("新增關閉日失敗，請確認 Supabase 已執行 V2.1 SQL");
+    console.error(error);
+    return;
+  }
+  alert("已新增關閉設定");
+  v21LoadBlocks();
+}
+
+async function v21DeleteBlock(id){
+  if(!confirm("確定刪除這個關閉設定？")) return;
+  const { error } = await db.from("booking_blocks").delete().eq("id", id);
+  if(error){
+    alert("刪除失敗");
+    console.error(error);
+    return;
+  }
+  v21LoadBlocks();
+}
+
+function v21EnsureBlocksPanel(){
+  const adminMain = document.getElementById("adminMain");
+  if(!adminMain || document.getElementById("bookingBlocksCard")) return;
+
+  const card = document.createElement("section");
+  card.className = "card";
+  card.id = "bookingBlocksCard";
+  card.innerHTML = `
+    <h2>一鍵關閉預約日／美容師休假</h2>
+    <p class="hint">可關閉全店當天預約，或只關閉某位美容師當天預約。不需要每天輸入上下班時間。</p>
+    <div class="form-grid">
+      <div class="field">
+        <label>關閉日期</label>
+        <input type="date" id="blockDate" value="${document.getElementById("date")?.value || new Date().toISOString().slice(0,10)}">
+      </div>
+      <div class="field">
+        <label>關閉對象</label>
+        <select id="blockTherapist">
+          ${BLOCK_THERAPISTS.map(t => `<option>${t}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>原因</label>
+        <input id="blockReason" placeholder="例如：公休、課程日、老師休假">
+      </div>
+    </div>
+    <button type="button" class="primary" onclick="v21CreateBlock()">新增關閉設定</button>
+    <div id="bookingBlocksContent" class="booking-blocks-list muted">載入中...</div>
+  `;
+  adminMain.appendChild(card);
+
+  document.getElementById("blockDate")?.addEventListener("change", v21LoadBlocks);
+  v21LoadBlocks();
+}
+
+setTimeout(v21EnsureBlocksPanel, 900);

@@ -526,3 +526,38 @@ footer{text-align:center;color:#8a765a;padding:28px;letter-spacing:1px}
   .cashier-row{grid-template-columns:1fr}
   .worklist-stats{grid-template-columns:1fr}
 }
+
+
+/* V2.1 一鍵關閉預約日 */
+.booking-blocks-list{
+  display:grid;
+  gap:10px;
+  margin-top:16px;
+}
+.block-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 14px;
+  border:1px solid rgba(185,144,60,.24);
+  border-radius:16px;
+  background:linear-gradient(135deg,#fffdf8,#f7edd7);
+}
+.closed-day-message{
+  padding:14px 16px;
+  margin:8px 0 12px;
+  border:1px solid rgba(185,144,60,.28);
+  border-radius:16px;
+  background:#fff7e6;
+  color:var(--brown);
+  font-weight:700;
+}
+button.disabled,
+button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+@media(max-width:760px){
+  .block-row{align-items:flex-start;flex-direction:column}
+}

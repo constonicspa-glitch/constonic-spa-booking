@@ -446,3 +446,85 @@ toggleNailRequestUI();
 renderCart();
 const today=new Date();
 $("date").min=today.toISOString().slice(0,10);
+
+
+
+/* =========================
+   CONSTONIC V2.1 FRONT BLOCKS
+   前台自動判斷關閉日 / 美容師休假
+========================= */
+
+let constonicBookingBlocks = [];
+
+async function loadConstonicBlocks(){
+  const date = $("date")?.value;
+  if(!date || !window.supabase || !window.CONSTONIC_CONFIG) return [];
+  const dbBlock = supabase.createClient(window.CONSTONIC_CONFIG.SUPABASE_URL, window.CONSTONIC_CONFIG.SUPABASE_ANON_KEY);
+  const { data, error } = await dbBlock.from("booking_blocks").select("*").eq("date", date);
+  if(error){
+    console.warn("booking_blocks 尚未建立或讀取失敗", error);
+    constonicBookingBlocks = [];
+    return [];
+  }
+  constonicBookingBlocks = data || [];
+  return constonicBookingBlocks;
+}
+
+function isConstonicClosedForTherapist(therapist){
+  return constonicBookingBlocks.some(b => {
+    const target = b.therapist || "全店";
+    return target === "全店" || target === therapist;
+  });
+}
+
+const originalRenderSlotsV21 = typeof renderSlots === "function" ? renderSlots : null;
+if(originalRenderSlotsV21){
+  window.renderSlots = function(){
+    originalRenderSlotsV21();
+    const slotList = $("slotList");
+    if(!slotList || !constonicBookingBlocks.length) return;
+
+    const allClosed = constonicBookingBlocks.some(b => (b.therapist || "全店") === "全店");
+    if(allClosed){
+      slotList.innerHTML = `<div class="closed-day-message">這一天店家暫停預約，請選擇其他日期。</div>`;
+      return;
+    }
+
+    const closedNames = constonicBookingBlocks.map(b => b.therapist).filter(Boolean);
+    if(closedNames.length){
+      const note = document.createElement("div");
+      note.className = "closed-day-message";
+      note.textContent = `休假／不開放：${closedNames.join("、")}。可選時段已自動排除。`;
+      slotList.prepend(note);
+    }
+
+    slotList.querySelectorAll("button").forEach(btn => {
+      const txt = btn.textContent || "";
+      closedNames.forEach(name => {
+        if(txt.includes(name)){
+          btn.disabled = true;
+          btn.classList.add("disabled");
+          btn.textContent = `${txt}｜${name}休假`;
+        }
+      });
+    });
+  };
+}
+
+const originalLoadBookingsAndSlotsV21 = typeof loadBookingsAndSlots === "function" ? loadBookingsAndSlots : null;
+if(originalLoadBookingsAndSlotsV21){
+  window.loadBookingsAndSlots = async function(){
+    await loadConstonicBlocks();
+    return originalLoadBookingsAndSlotsV21();
+  };
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const dateEl = $("date");
+  if(dateEl){
+    dateEl.addEventListener("change", async () => {
+      await loadConstonicBlocks();
+      if(typeof renderSlots === "function") renderSlots();
+    });
+  }
+});
