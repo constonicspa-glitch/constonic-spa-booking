@@ -1341,3 +1341,411 @@ window.openBookingModal = function(id){
 
   modal.classList.remove("hidden");
 };
+
+
+
+/* =========================
+   CONSTONIC ADMIN V3.1
+   後台修正預約項目／自動釋放前台空檔
+========================= */
+
+function v31AllTherapists(){
+  return ["雅潔老師","巧萱美容師","曼曼美甲師","不指定"];
+}
+
+function v31RenderItemEditor(b){
+  const items = b.items || [];
+  return `<div class="v3-panel v31-edit-panel">
+    <h3>修正預約項目</h3>
+    <p class="hint">若客人現場少做或更換項目，請在這裡刪除或修改；儲存後會重新計算保留時間，前台空檔會自動釋放。</p>
+    <div id="v31ItemRows" data-count="${items.length}">
+      ${items.map((item, idx)=>v31ItemRowHtml(item, idx)).join("")}
+    </div>
+    <div class="v31-edit-actions">
+      <button type="button" onclick="v31AddItemRow()">＋新增項目</button>
+      <button type="button" class="primary" onclick="v31SaveBookingItems('${escapeHtml(b.id)}')">儲存項目並釋放空檔</button>
+    </div>
+  </div>`;
+}
+
+function v31ItemRowHtml(item={}, idx=0){
+  const name = item.name || "";
+  const duration = Number(item.duration || 60);
+  const therapist = item.therapist || "";
+  return `<div class="v31-item-row" data-index="${idx}">
+    <div class="field">
+      <label>療程名稱</label>
+      <input id="v31ItemName_${idx}" value="${escapeHtml(name)}" placeholder="例如：臉部護膚">
+    </div>
+    <div class="field">
+      <label>療程時間</label>
+      <input id="v31ItemDuration_${idx}" type="number" min="0" step="10" value="${duration}">
+    </div>
+    <div class="field">
+      <label>服務人員</label>
+      <select id="v31ItemTherapist_${idx}">
+        ${v31AllTherapists().map(t=>`<option ${therapist===t?"selected":""}>${t}</option>`).join("")}
+      </select>
+    </div>
+    <button type="button" class="danger-soft" onclick="v31RemoveItemRow(this)">刪除</button>
+  </div>`;
+}
+
+function v31ReindexRows(){
+  const box = document.getElementById("v31ItemRows");
+  if(!box) return;
+  const rows = Array.from(box.querySelectorAll(".v31-item-row"));
+  rows.forEach((row, idx)=>{
+    row.dataset.index = idx;
+    row.querySelectorAll("input,select").forEach(el=>{
+      if(el.id.includes("v31ItemName_")) el.id = `v31ItemName_${idx}`;
+      if(el.id.includes("v31ItemDuration_")) el.id = `v31ItemDuration_${idx}`;
+      if(el.id.includes("v31ItemTherapist_")) el.id = `v31ItemTherapist_${idx}`;
+    });
+  });
+  box.dataset.count = rows.length;
+}
+
+function v31AddItemRow(){
+  const box = document.getElementById("v31ItemRows");
+  if(!box) return;
+  const idx = Number(box.dataset.count || 0);
+  box.insertAdjacentHTML("beforeend", v31ItemRowHtml({name:"",duration:60,therapist:"不指定"}, idx));
+  box.dataset.count = idx + 1;
+}
+
+function v31RemoveItemRow(btn){
+  const row = btn.closest(".v31-item-row");
+  if(row) row.remove();
+  v31ReindexRows();
+}
+
+function v31CollectItems(){
+  const box = document.getElementById("v31ItemRows");
+  if(!box) return [];
+  const count = Number(box.dataset.count || 0);
+  const items = [];
+  for(let i=0;i<count;i++){
+    const name = document.getElementById(`v31ItemName_${i}`)?.value?.trim();
+    const duration = Number(document.getElementById(`v31ItemDuration_${i}`)?.value || 0);
+    const therapist = document.getElementById(`v31ItemTherapist_${i}`)?.value || "不指定";
+    if(name && duration > 0){
+      items.push({name, duration, therapist});
+    }
+  }
+  return items;
+}
+
+function v31CalcItemTiming(items){
+  const serviceMinutes = (items || []).reduce((sum, item)=>sum + Number(item.duration || 0), 0);
+  let internalBuffer = 20;
+  if(serviceMinutes <= 60) internalBuffer = 10;
+  if(serviceMinutes >= 150) internalBuffer = 20;
+  const totalBlock = serviceMinutes + internalBuffer;
+  return { serviceMinutes, internalBuffer, totalBlock };
+}
+
+async function v31SaveBookingItems(id){
+  const items = v31CollectItems();
+  if(!items.length){
+    alert("至少要保留一個療程項目");
+    return;
+  }
+  const timing = v31CalcItemTiming(items);
+  const primaryTherapist = items[0]?.therapist || "不指定";
+
+  const { error } = await db.from("bookings").update({
+    items,
+    service_minutes: timing.serviceMinutes,
+    internal_buffer: timing.internalBuffer,
+    total_block: timing.totalBlock,
+    therapist: primaryTherapist
+  }).eq("id", id);
+
+  if(error){
+    alert("預約項目儲存失敗");
+    console.error(error);
+    return;
+  }
+
+  alert(`已更新預約項目，保留時間改為 ${timing.totalBlock} 分，前台空檔會自動重新開放。`);
+  closeBookingModal();
+  if(typeof renderBookings === "function") renderBookings();
+  if(typeof v2RenderTodayWorklist === "function") v2RenderTodayWorklist();
+  if(typeof v2SaveCheckout === "function"){} 
+}
+
+const v31PreviousDetailSection = typeof v3DetailSection === "function" ? v3DetailSection : null;
+if(v31PreviousDetailSection){
+  window.v3DetailSection = function(b){
+    return v31PreviousDetailSection(b) + v31RenderItemEditor(b);
+  };
+}
+
+
+
+/* =========================
+   CONSTONIC ADMIN V3.2
+   修正彈窗橫向超出 + 強制顯示修正預約項目
+========================= */
+
+window.CONSTONIC_ADMIN_VERSION = "V3.2";
+
+function v32DetailSection(b){
+  const nail = b.nail_request || null;
+  return `<div class="v3-panel">
+    <h3>預約資料</h3>
+    <div class="v3-info-grid">
+      <div><span>日期時間</span><strong>${escapeHtml(b.date)} ${escapeHtml(b.slot)}</strong></div>
+      <div><span>姓名</span><strong>${escapeHtml(b.customer_name || "-")}</strong></div>
+      <div><span>電話</span><strong>${escapeHtml(b.phone || "-")}</strong></div>
+      <div><span>LINE</span><strong>${escapeHtml(b.line_name || "-")}</strong></div>
+      <div><span>美容師</span><strong>${escapeHtml(b.therapist || "-")}</strong></div>
+      <div><span>狀態</span><strong>${v3SafeStatus(b.status)}</strong></div>
+      <div><span>第一次</span><strong>${escapeHtml(b.first_visit || "-")}</strong></div>
+      <div><span>房型</span><strong>${v3RoomDisplay(b.checkout?.room)}</strong></div>
+    </div>
+    <div class="v3-note-block">
+      <span>預約項目</span>
+      <p>${v3Items(b.items)}</p>
+    </div>
+    <div class="v3-note-block">
+      <span>時間保留</span>
+      <p>療程 ${Number(b.service_minutes||0)} 分｜整理 ${Number(b.internal_buffer||0)} 分｜保留 ${Number(b.total_block||0)} 分</p>
+    </div>
+    ${nail ? `<div class="v3-note-block">
+      <span>美甲申請</span>
+      <p>希望時段：${escapeHtml(nail.preferred_period||"-")}<br>指定時間：${escapeHtml(nail.preferred_time||"-")}<br>手部/足部：${escapeHtml(nail.part||"-")}<br>樣式：${escapeHtml(nail.style||"-")}<br>備註：${escapeHtml(nail.nail_note||"-")}</p>
+    </div>` : ""}
+    <div class="v3-note-block">
+      <span>備註</span>
+      <p>${escapeHtml(b.note || "-")}</p>
+    </div>
+  </div>`;
+}
+
+window.openBookingModal = function(id){
+  const b = (currentBookings || []).find(x=>x.id===id);
+  if(!b){ alert("找不到這筆預約"); return; }
+
+  const modal = document.getElementById("bookingModal");
+  const body = document.getElementById("bookingModalBody");
+  if(!modal || !body){
+    alert("後台彈窗元件不存在，請確認 admin.html 已更新到 V3.2");
+    return;
+  }
+
+  body.innerHTML = `<div class="v3-modal v32-modal">
+    <header class="v3-modal-header">
+      <div>
+        <p class="eyebrow">CONSTONIC ADMIN V3.2</p>
+        <h2>${escapeHtml(b.customer_name || "-")}｜${escapeHtml(b.date)} ${escapeHtml(b.slot)}</h2>
+      </div>
+      <button class="modal-close" onclick="closeBookingModal()">×</button>
+    </header>
+
+    <main class="v3-modal-body v32-modal-body">
+      <section class="v3-left">
+        ${v32DetailSection(b)}
+        ${v31RenderItemEditor(b)}
+        ${v3RoomSection(b)}
+      </section>
+      <section class="v3-right">
+        ${v3CashierSection(b)}
+      </section>
+    </main>
+
+    <footer class="v3-modal-footer">
+      <button onclick="updateStatus('${escapeHtml(b.id)}','confirmed')">已確認</button>
+      <button onclick="updateStatus('${escapeHtml(b.id)}','cancelled')">取消</button>
+      <button onclick="deleteBooking('${escapeHtml(b.id)}')">刪除</button>
+      <button class="primary" onclick="v2SaveCheckout('${escapeHtml(b.id)}')">儲存收銀</button>
+    </footer>
+  </div>`;
+
+  modal.classList.remove("hidden");
+};
+
+
+
+/* =========================
+   CONSTONIC ADMIN V3.3
+   資料同步修正：
+   1. 待確認中心點擊不同日期資料找不到
+   2. 前台新增預約後行事曆未即時出現
+   3. openBookingModal 找不到時直接從 Supabase 讀取
+========================= */
+
+window.CONSTONIC_ADMIN_VERSION = "V3.3";
+
+async function v33FetchBookingById(id){
+  const local = (window.currentBookings || currentBookings || []).find(b => b.id === id);
+  if(local) return local;
+
+  const { data, error } = await db.from("bookings").select("*").eq("id", id).single();
+  if(error){
+    console.error("v33FetchBookingById error", error);
+    return null;
+  }
+  return data;
+}
+
+async function v33RenderModalFromBooking(b){
+  if(!b){
+    alert("找不到這筆預約，可能已被刪除或資料尚未同步。請按更新後再試。");
+    return;
+  }
+
+  const modal = document.getElementById("bookingModal");
+  const body = document.getElementById("bookingModalBody");
+  if(!modal || !body){
+    alert("後台彈窗元件不存在，請確認 admin.html 已更新到 V3.3");
+    return;
+  }
+
+  const detailHtml = typeof v32DetailSection === "function" ? v32DetailSection(b) :
+    (typeof v3DetailSection === "function" ? v3DetailSection(b) : "");
+
+  const editHtml = typeof v31RenderItemEditor === "function" ? v31RenderItemEditor(b) : "";
+  const roomHtml = typeof v3RoomSection === "function" ? v3RoomSection(b) : "";
+  const cashierHtml = typeof v3CashierSection === "function" ? v3CashierSection(b) : "";
+
+  body.innerHTML = `<div class="v3-modal v32-modal">
+    <header class="v3-modal-header">
+      <div>
+        <p class="eyebrow">CONSTONIC ADMIN V3.3</p>
+        <h2>${escapeHtml(b.customer_name || "-")}｜${escapeHtml(b.date)} ${escapeHtml(b.slot)}</h2>
+      </div>
+      <button class="modal-close" onclick="closeBookingModal()">×</button>
+    </header>
+
+    <main class="v3-modal-body v32-modal-body">
+      <section class="v3-left">
+        ${detailHtml}
+        ${editHtml}
+        ${roomHtml}
+      </section>
+      <section class="v3-right">
+        ${cashierHtml}
+      </section>
+    </main>
+
+    <footer class="v3-modal-footer">
+      <button onclick="updateStatus('${escapeHtml(b.id)}','confirmed')">已確認</button>
+      <button onclick="updateStatus('${escapeHtml(b.id)}','cancelled')">取消</button>
+      <button onclick="deleteBooking('${escapeHtml(b.id)}')">刪除</button>
+      <button class="primary" onclick="v2SaveCheckout('${escapeHtml(b.id)}')">儲存收銀</button>
+    </footer>
+  </div>`;
+
+  modal.classList.remove("hidden");
+}
+
+window.openBookingModal = async function(id){
+  const b = await v33FetchBookingById(id);
+  await v33RenderModalFromBooking(b);
+};
+
+async function v33ForceRefreshAll(){
+  if(typeof renderBookings === "function") await renderBookings();
+  if(typeof renderPendingCenter === "function") await renderPendingCenter();
+  if(typeof v2RenderTodayWorklist === "function") await v2RenderTodayWorklist();
+  if(typeof v2RenderTodayWorklist === "undefined" && typeof v2RenderTodayWorklist !== "function" && typeof v33RenderTodayWorklist === "function") await v33RenderTodayWorklist();
+  if(typeof renderMonthlyReport === "function") await renderMonthlyReport();
+}
+
+async function v33RenderPendingCenter(){
+  const box = document.getElementById("pendingCenter");
+  if(!box) return;
+
+  const { data, error } = await db
+    .from("bookings")
+    .select("*")
+    .in("status", ["pending", "nail_request", "confirmed"])
+    .order("date", { ascending: true })
+    .order("slot", { ascending: true })
+    .limit(50);
+
+  if(error){
+    box.innerHTML = "讀取待確認資料失敗。";
+    console.error(error);
+    return;
+  }
+
+  const rows = (data || []).filter(b => b.status !== "completed" && b.status !== "cancelled");
+  if(!rows.length){
+    box.className = "pending-center muted";
+    box.innerHTML = "目前沒有待確認預約。";
+    return;
+  }
+
+  box.className = "pending-center";
+  box.innerHTML = rows.map(b => {
+    const nail = b.nail_request || {};
+    const nailText = b.status === "nail_request"
+      ? `<div class="hint">美甲需求：${escapeHtml(nail.part || "-")}｜${escapeHtml(nail.style || "-")}｜${escapeHtml(nail.preferred_period || "-")}｜${escapeHtml(nail.preferred_time || "-")}</div>`
+      : "";
+    return `<div class="pending-card ${typeof therapistClass==="function" ? therapistClass(b.therapist) : ""}" onclick="openBookingModal('${escapeHtml(b.id)}')">
+      <div class="booking-color-strip"></div>
+      <strong>${escapeHtml(b.date)}｜${escapeHtml(b.slot)}｜${escapeHtml(b.customer_name || "-")}</strong>
+      <div>${typeof formatItems==="function" ? formatItems(b.items, true) : ""}</div>
+      ${nailText}
+      <div class="hint">${typeof statusText==="function" ? statusText(b.status) : b.status}</div>
+    </div>`;
+  }).join("");
+}
+
+window.renderPendingCenter = v33RenderPendingCenter;
+
+async function v33RenderTodayWorklist(){
+  const content = document.getElementById("todayWorklistContent");
+  if(!content) return;
+
+  const dateValue = document.getElementById("date")?.value || new Date().toISOString().slice(0,10);
+  const { data, error } = await db.from("bookings").select("*").eq("date", dateValue).order("slot", { ascending:true });
+
+  if(error){
+    content.innerHTML = "今日工作清單讀取失敗。";
+    console.error(error);
+    return;
+  }
+
+  const rows = data || [];
+  const active = rows.filter(b => b.status !== "cancelled");
+  const unpaid = active.filter(b => b.status !== "completed");
+  const noRoom = active.filter(b => !b.checkout?.room || b.checkout?.room === "未指定");
+
+  content.className = "today-worklist";
+  if(!active.length){
+    content.innerHTML = "這一天目前沒有預約。";
+    return;
+  }
+
+  content.innerHTML = `<div class="worklist-stats">
+    <div class="stat-card"><div class="stat-value">${active.length}</div><div class="stat-label">今日預約</div></div>
+    <div class="stat-card"><div class="stat-value">${unpaid.length}</div><div class="stat-label">未完成收銀</div></div>
+    <div class="stat-card"><div class="stat-value">${noRoom.length}</div><div class="stat-label">未安排房型</div></div>
+  </div>
+  <div class="worklist-list">${active.map(b=>`<div class="worklist-item ${typeof therapistClass==="function"?therapistClass(b.therapist):""}" onclick="openBookingModal('${escapeHtml(b.id)}')">
+    <div class="booking-color-strip"></div>
+    <strong>${escapeHtml(b.slot)}｜${escapeHtml(b.customer_name||"-")}</strong>
+    <div>${escapeHtml(b.therapist||"-")}｜${typeof v3RoomDisplay==="function" ? v3RoomDisplay(b.checkout?.room) : (b.checkout?.room || "未指定")}</div>
+    <div class="hint">${typeof v3SafeStatus==="function" ? v3SafeStatus(b.status) : b.status}｜${typeof v3Items==="function" ? v3Items(b.items) : ""}</div>
+  </div>`).join("")}</div>`;
+}
+
+window.v2RenderTodayWorklist = v33RenderTodayWorklist;
+window.v33RenderTodayWorklist = v33RenderTodayWorklist;
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    v33ForceRefreshAll();
+  }, 1200);
+
+  const dateEl = document.getElementById("date");
+  if(dateEl){
+    dateEl.addEventListener("change", () => {
+      setTimeout(() => v33ForceRefreshAll(), 250);
+    });
+  }
+});

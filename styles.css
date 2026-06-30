@@ -915,3 +915,166 @@ button:disabled{
     gap:8px;
   }
 }
+
+
+/* CONSTONIC ADMIN V3.1 - 編輯預約項目 */
+.v31-edit-panel{
+  border-color:rgba(32,61,50,.22);
+}
+.v31-item-row{
+  display:grid;
+  grid-template-columns:1.35fr .65fr .8fr auto;
+  gap:10px;
+  align-items:end;
+  padding:12px;
+  margin-bottom:10px;
+  border:1px solid rgba(185,144,60,.18);
+  border-radius:16px;
+  background:#fffaf0;
+}
+.v31-edit-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+.danger-soft{
+  background:#fff7f0 !important;
+  border-color:rgba(200,80,60,.25) !important;
+  color:#9a3b2f !important;
+}
+@media(max-width:980px){
+  .v31-item-row{
+    grid-template-columns:1fr 1fr;
+  }
+}
+@media(max-width:640px){
+  .v31-item-row{
+    grid-template-columns:1fr;
+  }
+}
+
+
+/* CONSTONIC ADMIN V3.2 - 防止彈窗橫向超出 */
+html, body{
+  max-width:100%;
+  overflow-x:hidden;
+}
+.modal{
+  overflow:hidden !important;
+}
+.modal-content,
+.modal-content.wide-modal{
+  width:min(94vw, 1080px) !important;
+  max-width:94vw !important;
+  max-height:90vh !important;
+  overflow:hidden !important;
+  box-sizing:border-box !important;
+}
+.v3-modal,
+.v32-modal{
+  width:100%;
+  max-width:100%;
+  height:90vh;
+  max-height:90vh;
+  overflow:hidden;
+  box-sizing:border-box;
+}
+.v3-modal-body,
+.v32-modal-body{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  overflow-y:auto;
+  overflow-x:hidden;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+}
+.v3-left,
+.v3-right,
+.v3-panel,
+.v31-edit-panel,
+.v3-cashier-panel{
+  min-width:0 !important;
+  max-width:100% !important;
+  box-sizing:border-box !important;
+}
+.v3-info-grid,
+.v3-cashier-head,
+.v3-money-grid,
+.v31-item-row,
+.v3-tech-row{
+  min-width:0 !important;
+}
+.v3-panel input,
+.v3-panel select,
+.v3-panel textarea,
+.v31-edit-panel input,
+.v31-edit-panel select,
+.v31-edit-panel textarea{
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+}
+.v31-item-row{
+  grid-template-columns:minmax(0,1.2fr) minmax(0,.65fr) minmax(0,.8fr) auto !important;
+}
+.v31-edit-actions{
+  position:sticky;
+  bottom:0;
+  z-index:3;
+  padding:10px 0 0;
+  background:#fffdf8;
+}
+@media(max-width:1180px){
+  .modal-content,
+  .modal-content.wide-modal{
+    width:96vw !important;
+    max-width:96vw !important;
+  }
+  .v3-modal-body,
+  .v32-modal-body{
+    grid-template-columns:1fr !important;
+  }
+}
+@media(max-width:760px){
+  .modal-content,
+  .modal-content.wide-modal{
+    width:98vw !important;
+    max-width:98vw !important;
+    max-height:92vh !important;
+    border-radius:16px !important;
+  }
+  .v3-modal,
+  .v32-modal{
+    height:92vh;
+    max-height:92vh;
+  }
+  .v3-modal-header{
+    padding:12px !important;
+  }
+  .v3-modal-body,
+  .v32-modal-body{
+    padding:10px !important;
+  }
+  .v31-item-row,
+  .v3-tech-row{
+    grid-template-columns:1fr !important;
+  }
+  .v3-modal-footer{
+    grid-template-columns:repeat(2,1fr) !important;
+    padding:10px !important;
+  }
+}
+
+
+/* CONSTONIC ADMIN V3.3 - 同步提示 */
+.pending-card,
+.worklist-item,
+.booking-card{
+  user-select:none;
+}
+.pending-card strong,
+.worklist-item strong{
+  word-break:break-word;
+}
