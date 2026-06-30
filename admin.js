@@ -343,6 +343,111 @@ async function saveCheckout(id){
   if(typeof renderMonthlyReport === "function") renderMonthlyReport();
 }
 
+
+const roomOptions = ["未指定", "201", "202", "203", "VIP301-A", "VIP301-B", "VIP302"];
+
+function roomDisplay(room){
+  if(room === "VIP301-A") return "VIP301 床A";
+  if(room === "VIP301-B") return "VIP301 床B";
+  return room || "未指定";
+}
+
+function renderRoomForm(b){
+  const selected = b.checkout?.room || "未指定";
+  return `<div class="room-box">
+    <h3>房型安排</h3>
+    <p class="hint">VIP301 有兩張床，可同時安排兩位；系統以 VIP301 床A／床B 分開記錄。</p>
+    <div class="form-grid">
+      <div class="field">
+        <label>房型／床位</label>
+        <select id="roomSelect">
+          ${roomOptions.map(r => `<option value="${r}" ${selected===r ? "selected" : ""}>${roomDisplay(r)}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <button type="button" onclick="saveRoom('${escapeHtml(b.id)}')">儲存房型</button>
+  </div>`;
+}
+
+async function saveRoom(id){
+  const room = document.getElementById("roomSelect")?.value || "未指定";
+  const booking = currentBookings.find(b => b.id === id) || {};
+  const checkout = booking.checkout || {};
+  checkout.room = room;
+  const { error } = await db.from("bookings").update({ checkout }).eq("id", id);
+  if(error){
+    alert("房型儲存失敗");
+    console.error(error);
+    return;
+  }
+  alert("房型已儲存");
+  closeBookingModal();
+  renderBookings();
+  if(typeof renderTodayWorklist === "function") renderTodayWorklist();
+}
+
+async function renderTodayWorklist(){
+  let box = document.getElementById("todayWorklistCard");
+  const adminMain = document.getElementById("adminMain");
+  if(!adminMain) return;
+
+  if(!box){
+    box = document.createElement("section");
+    box.className = "card";
+    box.id = "todayWorklistCard";
+    box.innerHTML = `
+      <div class="report-title-row">
+        <h2>今日工作清單／未收銀提醒</h2>
+        <button type="button" onclick="renderTodayWorklist()">更新</button>
+      </div>
+      <div id="todayWorklistContent" class="muted">載入中...</div>
+    `;
+    const firstCard = adminMain.querySelector(".card");
+    if(firstCard && firstCard.nextSibling){
+      adminMain.insertBefore(box, firstCard.nextSibling);
+    }else{
+      adminMain.appendChild(box);
+    }
+  }
+
+  const content = document.getElementById("todayWorklistContent");
+  const dateValue = document.getElementById("date")?.value || new Date().toISOString().slice(0,10);
+
+  const { data, error } = await db.from("bookings").select("*").eq("date", dateValue).order("slot", { ascending: true });
+  if(error){
+    content.innerHTML = "今日工作清單讀取失敗。";
+    console.error(error);
+    return;
+  }
+
+  const rows = data || [];
+  if(!rows.length){
+    content.className = "muted";
+    content.innerHTML = "這一天目前沒有預約。";
+    return;
+  }
+
+  const active = rows.filter(b => b.status !== "cancelled");
+  const unpaid = active.filter(b => b.status !== "completed" && b.status !== "cancelled");
+  const noRoom = active.filter(b => !b.checkout?.room || b.checkout?.room === "未指定");
+
+  content.className = "today-worklist";
+  content.innerHTML = `
+    <div class="worklist-stats">
+      <div class="stat-card"><div class="stat-value">${active.length}</div><div class="stat-label">今日預約</div></div>
+      <div class="stat-card"><div class="stat-value">${unpaid.length}</div><div class="stat-label">未完成收銀</div></div>
+      <div class="stat-card"><div class="stat-value">${noRoom.length}</div><div class="stat-label">未安排房型</div></div>
+    </div>
+    <div class="worklist-list">
+      ${active.map(b => `<div class="worklist-item ${therapistClass(b.therapist)}" onclick="openBookingModal('${escapeHtml(b.id)}')">
+        <div class="booking-color-strip"></div>
+        <strong>${escapeHtml(b.slot)}｜${escapeHtml(b.customer_name)}</strong>
+        <div>${escapeHtml(b.therapist)}｜${roomDisplay(b.checkout?.room)}</div>
+        <div class="hint">${statusText(b.status)}｜${formatItems(b.items, true)}</div>
+      </div>`).join("")}
+    </div>`;
+}
+
 function openBookingModal(id) {
   const b = currentBookings.find(item => item.id === id); if (!b) return;
   $("bookingModalBody").innerHTML = `<div class="summary">
@@ -550,7 +655,7 @@ async function renderMonthlyReport(){
 
 const today = new Date();
 $("date").value = today.toISOString().slice(0,10);
-$("date").addEventListener("change", () => { renderBookings(); renderMonthlyReport(); });
+$("date").addEventListener("change", () => { renderBookings(); renderTodayWorklist(); renderMonthlyReport(); });
 $("therapistFilter").addEventListener("change", renderBookings);
 $("viewMode").addEventListener("change", renderBookings);
 if (getCurrentUser()) showAdmin();

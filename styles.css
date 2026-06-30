@@ -407,3 +407,36 @@ footer{text-align:center;color:#8a765a;padding:28px;letter-spacing:1px}
 @media(max-width:760px){
   .monthly-report-grid{grid-template-columns:1fr}
 }
+
+
+/* V1.3 房型安排與今日工作清單 */
+.room-box{
+  margin-top:18px;
+  padding:18px;
+  border:1px solid rgba(40,120,215,.24);
+  border-radius:22px;
+  background:linear-gradient(135deg,#fffdf8,#f4f8ff);
+}
+.room-box h3{margin:0 0 10px;color:var(--green)}
+.today-worklist{display:grid;gap:14px}
+.worklist-stats{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.worklist-list{display:grid;gap:10px}
+.worklist-item{
+  position:relative;
+  padding:14px 14px 14px 18px;
+  border:1px solid rgba(185,144,60,.26);
+  border-radius:18px;
+  background:linear-gradient(135deg,#fffdf8,#f7edd7);
+  cursor:pointer;
+}
+.worklist-item:hover{
+  transform:translateY(-1px);
+  box-shadow:0 10px 22px rgba(73,49,23,.12);
+}
+@media(max-width:760px){
+  .worklist-stats{grid-template-columns:1fr}
+}
