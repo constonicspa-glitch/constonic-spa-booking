@@ -1012,3 +1012,125 @@ function v21EnsureBlocksPanel(){
 }
 
 setTimeout(v21EnsureBlocksPanel, 900);
+
+
+
+/* =========================
+   CONSTONIC V2.2 COMPACT MODAL
+   手機版分頁式彈窗，避免頁面過長卡頓
+========================= */
+
+function v22SwitchTab(tab){
+  document.querySelectorAll(".v22-tab-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
+  document.querySelectorAll(".v22-tab-panel").forEach(panel => panel.classList.toggle("active", panel.dataset.panel === tab));
+}
+
+function v22RenderCompactBookingDetail(b){
+  const nail = b.nail_request || null;
+  return `<div class="v22-detail-list">
+    <div><span>預約時間</span><strong>${escapeHtml(b.date)} ${escapeHtml(b.slot)}</strong></div>
+    <div><span>姓名</span><strong>${escapeHtml(b.customer_name || "-")}</strong></div>
+    <div><span>電話</span><strong>${escapeHtml(b.phone || "-")}</strong></div>
+    <div><span>LINE</span><strong>${escapeHtml(b.line_name || "-")}</strong></div>
+    <div><span>美容師</span><strong>${escapeHtml(b.therapist || "-")}</strong></div>
+    <div><span>狀態</span><strong>${v2StatusText(b.status)}</strong></div>
+    <div class="full"><span>預約項目</span><p>${v2FormatItems(b.items)}</p></div>
+    <div class="full"><span>時間保留</span><p>療程 ${Number(b.service_minutes||0)} 分｜整理 ${Number(b.internal_buffer||0)} 分｜保留 ${Number(b.total_block||0)} 分</p></div>
+    ${nail ? `<div class="full"><span>美甲申請</span><p>希望時段：${escapeHtml(nail.preferred_period||"-")}<br>指定時間：${escapeHtml(nail.preferred_time||"-")}<br>手部/足部：${escapeHtml(nail.part||"-")}<br>樣式：${escapeHtml(nail.style||"-")}<br>備註：${escapeHtml(nail.nail_note||"-")}</p></div>` : ""}
+    <div class="full"><span>備註</span><p>${escapeHtml(b.note || "-")}</p></div>
+  </div>`;
+}
+
+function v22RenderCompactCheckoutSection(b){
+  const c = v2CheckoutDefaults(b);
+  const totals = v2CheckoutTotals(c);
+  const rows = (c.tech_rows || []).map((r,idx)=>`
+    <div class="cashier-row compact">
+      <div class="field"><label>項目</label><input id="v2TechName_${idx}" value="${escapeHtml(r.item_name||"")}"></div>
+      <div class="field"><label>金額</label><input id="v2TechAmount_${idx}" type="number" min="0" value="${Number(r.amount||0)}"></div>
+      <div class="field"><label>抽成</label><select id="v2TechRate_${idx}">
+        <option value="30" ${String(r.rate)==="30"?"selected":""}>30%</option>
+        <option value="40" ${String(r.rate)==="40"?"selected":""}>40%</option>
+      </select></div>
+    </div>`).join("");
+
+  return `<div class="v22-compact-checkout">
+    <div class="form-grid compact-grid">
+      <div class="field"><label>收款狀態</label><select id="v2PaymentStatus">${["已收款","部分收款","未收款"].map(v=>`<option ${c.payment_status===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label>收款方式</label><select id="v2PaymentMethod">${["現金","刷卡","匯款","LINE Pay","街口支付","Apple Pay","Google Pay","其他"].map(v=>`<option ${c.payment_method===v?"selected":""}>${v}</option>`).join("")}</select></div>
+    </div>
+
+    <details open class="v22-details">
+      <summary>技術服務</summary>
+      <div id="v2TechRows" data-count="${(c.tech_rows||[]).length}">${rows}</div>
+    </details>
+
+    <details class="v22-details">
+      <summary>商品／課程／儲值／平台</summary>
+      <div class="form-grid compact-grid">
+        <div class="field"><label>商品（10%）</label><input id="v2ProductAmount" type="number" min="0" value="${c.product_amount}"></div>
+        <div class="field"><label>新購課程（2%）</label><input id="v2CourseAmount" type="number" min="0" value="${c.course_amount}"></div>
+        <div class="field"><label>新收儲值（2%）</label><input id="v2StoredValueAmount" type="number" min="0" value="${c.stored_value_new_amount}"></div>
+        <div class="field"><label>平台固定薪資</label><input id="v2PlatformPay" type="number" min="0" value="${c.platform_fixed_pay}"></div>
+        <div class="field"><label>本次實收</label><input id="v2TotalReceived" type="number" min="0" value="${c.total_received}"></div>
+        <div class="field"><label>發票</label><select id="v2InvoiceStatus">${["未開","已開","免開"].map(v=>`<option ${c.invoice_status===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      </div>
+      <div class="field"><label>收款備註</label><textarea id="v2ReceiptNote" rows="2">${escapeHtml(c.receipt_note||"")}</textarea></div>
+    </details>
+
+    <div class="cashier-summary compact-summary">
+      <div>技術30%：NT$ ${v2Money(totals.tech30Bonus)}</div>
+      <div>技術40%：NT$ ${v2Money(totals.tech40Bonus)}</div>
+      <div>商品10%：NT$ ${v2Money(totals.productBonus)}</div>
+      <div>課程／儲值2%：NT$ ${v2Money(totals.courseBonus)}</div>
+      <div>平台固定：NT$ ${v2Money(totals.platformPay)}</div>
+      <strong>本次薪資：NT$ ${v2Money(totals.salaryTotal)}</strong>
+    </div>
+  </div>`;
+}
+
+window.openBookingModal = function(id){
+  const b = (currentBookings || []).find(x=>x.id===id);
+  if(!b){ alert("找不到這筆預約"); return; }
+  const modal = document.getElementById("bookingModal");
+  const body = document.getElementById("bookingModalBody");
+  if(!modal || !body){ alert("後台彈窗元件不存在，請確認 admin.html 已更新"); return; }
+
+  body.innerHTML = `<div class="v22-modal-shell">
+    <div class="v22-modal-header">
+      <div>
+        <h2>預約資料</h2>
+        <p>${escapeHtml(b.customer_name || "-")}｜${escapeHtml(b.date)} ${escapeHtml(b.slot)}</p>
+      </div>
+      <button class="modal-close" onclick="closeBookingModal()">×</button>
+    </div>
+
+    <div class="v22-tabs">
+      <button type="button" class="v22-tab-btn active" data-tab="detail" onclick="v22SwitchTab('detail')">資料</button>
+      <button type="button" class="v22-tab-btn" data-tab="room" onclick="v22SwitchTab('room')">房型</button>
+      <button type="button" class="v22-tab-btn" data-tab="cashier" onclick="v22SwitchTab('cashier')">收銀</button>
+    </div>
+
+    <div class="v22-modal-scroll">
+      <section class="v22-tab-panel active" data-panel="detail">
+        ${v22RenderCompactBookingDetail(b)}
+      </section>
+
+      <section class="v22-tab-panel" data-panel="room">
+        ${v2RenderRoomSection(b)}
+      </section>
+
+      <section class="v22-tab-panel" data-panel="cashier">
+        ${v22RenderCompactCheckoutSection(b)}
+      </section>
+    </div>
+
+    <div class="v22-modal-actions">
+      <button onclick="updateStatus('${escapeHtml(b.id)}','confirmed')">已確認</button>
+      <button onclick="updateStatus('${escapeHtml(b.id)}','cancelled')">取消</button>
+      <button onclick="deleteBooking('${escapeHtml(b.id)}')">刪除</button>
+      <button class="primary" onclick="v2SaveCheckout('${escapeHtml(b.id)}')">儲存收銀</button>
+    </div>
+  </div>`;
+  modal.classList.remove("hidden");
+};
