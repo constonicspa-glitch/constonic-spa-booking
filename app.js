@@ -576,3 +576,151 @@ function v41FrontIsBusy(segs, therapist, start, end){
     return start < s.end && end > s.start;
   });
 }
+
+
+/* =========================
+   CONSTONIC FRONT V4.2
+   前台空檔依每個療程分段釋放
+   修正：同一筆預約多位美容師時，不再整筆鎖住主美容師
+========================= */
+
+window.CONSTONIC_FRONT_VERSION = "V4.2";
+
+function c42TimeToMin(t){
+  const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function c42MinToTime(min){
+  return String(Math.floor(min / 60)).padStart(2,"0") + ":" + String(min % 60).padStart(2,"0");
+}
+
+function c42NormalizeStaff(name){
+  if(["雅潔老師","巧萱美容師","曼曼美甲師"].includes(name)) return name;
+  return "不指定";
+}
+
+function c42BookingSegments(bookings){
+  const segments = [];
+  (bookings || []).forEach(b => {
+    if(b.status === "cancelled") return;
+    const base = c42TimeToMin(b.slot);
+    if(base === null) return;
+
+    const items = Array.isArray(b.items) ? b.items : [];
+    if(!items.length){
+      const staff = c42NormalizeStaff(b.therapist);
+      segments.push({
+        booking_id:b.id,
+        therapist:staff,
+        start:base,
+        end:base + Number(b.total_block || b.service_minutes || 0)
+      });
+      return;
+    }
+
+    let offset = 0;
+    items.forEach(item => {
+      const duration = Number(item.duration || 0);
+      const staff = c42NormalizeStaff(item.therapist || b.therapist);
+      if(duration > 0){
+        segments.push({
+          booking_id:b.id,
+          therapist:staff,
+          start:base + offset,
+          end:base + offset + duration
+        });
+      }
+      offset += duration;
+    });
+  });
+  return segments;
+}
+
+function c42CartSegments(startMin){
+  const selectedItems = (typeof cart !== "undefined" && Array.isArray(cart)) ? cart : [];
+  const segments = [];
+  let offset = 0;
+
+  selectedItems.forEach(item => {
+    const duration = Number(item.duration || 0);
+    const staff = c42NormalizeStaff(item.therapist || document.querySelector("[data-current-therapist]")?.dataset.currentTherapist || "不指定");
+    if(duration > 0){
+      segments.push({
+        therapist:staff,
+        start:startMin + offset,
+        end:startMin + offset + duration
+      });
+    }
+    offset += duration;
+  });
+
+  return segments;
+}
+
+function c42Overlap(aStart, aEnd, bStart, bEnd){
+  return aStart < bEnd && aEnd > bStart;
+}
+
+function c42IsSlotAvailableBySegments(bookings, startTime){
+  const startMin = c42TimeToMin(startTime);
+  if(startMin === null) return false;
+
+  const busy = c42BookingSegments(bookings);
+  const need = c42CartSegments(startMin);
+
+  if(!need.length){
+    const total = (typeof totalBlock !== "undefined") ? Number(totalBlock || 0) : 0;
+    const therapist = typeof selectedTherapist !== "undefined" ? selectedTherapist : "不指定";
+    need.push({therapist:c42NormalizeStaff(therapist), start:startMin, end:startMin + total});
+  }
+
+  return need.every(n => {
+    if(n.therapist === "不指定"){
+      return !busy.some(b => c42Overlap(n.start, n.end, b.start, b.end));
+    }
+    return !busy.some(b => b.therapist === n.therapist && c42Overlap(n.start, n.end, b.start, b.end));
+  });
+}
+
+/* 覆蓋前台時段渲染：以分段占用判斷 */
+async function c42RenderSlots(){
+  const box = document.getElementById("slotList") || document.getElementById("slots") || document.querySelector(".slot-list");
+  const dateInput = document.getElementById("date") || document.getElementById("bookingDate");
+  if(!box || !dateInput) return false;
+
+  const date = dateInput.value;
+  if(!date) return false;
+
+  const {data, error} = await db.from("bookings").select("*").eq("date", date);
+  if(error){
+    console.error(error);
+    box.innerHTML = "<p>讀取時段失敗，請稍後再試。</p>";
+    return true;
+  }
+
+  const bookings = data || [];
+  const times = ["10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"];
+
+  box.innerHTML = times.map(t => {
+    const ok = c42IsSlotAvailableBySegments(bookings, t);
+    return `<button type="button" class="slot-btn ${ok ? "" : "disabled"}" ${ok ? `onclick="selectSlot('${t}')"` : "disabled"}>${t}${ok ? "" : " 已滿"}</button>`;
+  }).join("");
+
+  return true;
+}
+
+const c42OldRenderSlots = typeof renderSlots === "function" ? renderSlots : null;
+window.renderSlots = async function(){
+  const handled = await c42RenderSlots();
+  if(!handled && c42OldRenderSlots) return c42OldRenderSlots();
+};
+
+document.addEventListener("change", e => {
+  if(e.target && (e.target.id === "date" || e.target.id === "bookingDate" || e.target.matches("select"))){
+    setTimeout(() => {
+      if(typeof renderSlots === "function") renderSlots();
+    }, 150);
+  }
+});

@@ -579,3 +579,134 @@ setTimeout(() => {
     }
   });
 }, 1000);
+
+
+/* =========================
+   CONSTONIC ADMIN V4.2
+   技術服務新增固定薪資輸入
+========================= */
+
+window.CONSTONIC_ADMIN_VERSION = "V4.2";
+
+function c42Money(n){
+  return Number(n || 0).toLocaleString("zh-TW");
+}
+
+function c42EnsureFixedPayOptions(){
+  document.querySelectorAll('select[id*="TechRate"], select[data-rate-select]').forEach(sel => {
+    if(!Array.from(sel.options).some(o => o.value === "fixed")){
+      const opt = document.createElement("option");
+      opt.value = "fixed";
+      opt.textContent = "固定薪資";
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function c42AddFixedPayFields(){
+  document.querySelectorAll(".v3-tech-row, .tech-row, .cashier-row").forEach((row, idx) => {
+    if(row.querySelector(".c42-fixed-pay-field")) return;
+    const sel = row.querySelector('select[id*="TechRate"], select[data-rate-select]');
+    if(!sel) return;
+    const wrap = document.createElement("div");
+    wrap.className = "field c42-fixed-pay-field";
+    wrap.innerHTML = `<label>固定薪資</label><input id="c42FixedPay_${idx}" type="number" min="0" value="0" placeholder="平台獎金">`;
+    row.appendChild(wrap);
+    sel.addEventListener("change", () => {
+      wrap.classList.toggle("hidden", sel.value !== "fixed");
+      c42UpdateSalaryPreview();
+    });
+    wrap.classList.toggle("hidden", sel.value !== "fixed");
+  });
+}
+
+function c42UpdateSalaryPreview(){
+  let tech30 = 0, tech40 = 0, fixed = 0;
+
+  document.querySelectorAll(".v3-tech-row, .tech-row, .cashier-row").forEach((row, idx) => {
+    const amountInput = row.querySelector('input[id*="TechAmount"], input[type="number"]');
+    const rateSelect = row.querySelector('select[id*="TechRate"], select[data-rate-select]');
+    const amount = Number(amountInput?.value || 0);
+    const rate = rateSelect?.value || "30";
+    if(rate === "30") tech30 += Math.round(amount * .3);
+    else if(rate === "40") tech40 += Math.round(amount * .4);
+    else if(rate === "fixed") fixed += Number(row.querySelector(".c42-fixed-pay-field input")?.value || 0);
+  });
+
+  const salaryBox = document.querySelector(".v3-salary-card, .salary-summary");
+  if(salaryBox && !salaryBox.querySelector(".c42-fixed-row")){
+    const div = document.createElement("div");
+    div.className = "c42-fixed-row";
+    div.innerHTML = `<span>固定薪資</span><strong>NT$ 0</strong>`;
+    salaryBox.insertBefore(div, salaryBox.querySelector(".total"));
+  }
+  const fixedRow = document.querySelector(".c42-fixed-row strong");
+  if(fixedRow) fixedRow.textContent = "NT$ " + c42Money(fixed);
+
+  const totalStrong = document.querySelector(".v3-salary-card .total strong, .salary-summary .total strong");
+  if(totalStrong){
+    const productText = Array.from(document.querySelectorAll(".v3-salary-card div, .salary-summary div")).find(x=>x.textContent.includes("商品"))?.querySelector("strong")?.textContent || "0";
+    const courseText = Array.from(document.querySelectorAll(".v3-salary-card div, .salary-summary div")).find(x=>x.textContent.includes("課程"))?.querySelector("strong")?.textContent || "0";
+    const platformText = Array.from(document.querySelectorAll(".v3-salary-card div, .salary-summary div")).find(x=>x.textContent.includes("平台"))?.querySelector("strong")?.textContent || "0";
+    const parseMoney = s => Number(String(s).replace(/[^\d.-]/g,"") || 0);
+    totalStrong.textContent = "NT$ " + c42Money(tech30 + tech40 + fixed + parseMoney(productText) + parseMoney(courseText) + parseMoney(platformText));
+  }
+}
+
+const c42OldSaveCheckout = typeof v2SaveCheckout === "function" ? v2SaveCheckout : null;
+window.v2SaveCheckout = async function(id){
+  const count = Number(document.getElementById("v2TechRows")?.dataset.count || document.querySelectorAll(".v3-tech-row,.tech-row,.cashier-row").length || 0);
+  const techRows = [];
+  for(let i=0;i<count;i++){
+    const name = document.getElementById(`v2TechName_${i}`)?.value || document.querySelectorAll(".v3-tech-row input")[i*2]?.value || "";
+    const amount = Number(document.getElementById(`v2TechAmount_${i}`)?.value || 0);
+    const rate = document.getElementById(`v2TechRate_${i}`)?.value || document.querySelectorAll('select[id*="TechRate"]')[i]?.value || "30";
+    const fixedPay = Number(document.getElementById(`c42FixedPay_${i}`)?.value || 0);
+    techRows.push({item_name:name, amount, rate, fixed_pay:fixedPay});
+  }
+
+  const booking = (currentBookings || []).find(b => b.id === id) || {};
+  const old = booking.checkout || {};
+  const checkout = {
+    ...old,
+    room: document.getElementById("v2RoomSelect")?.value || old.room || "未指定",
+    payment_status: document.getElementById("v2PaymentStatus")?.value || old.payment_status || "未收款",
+    payment_method: document.getElementById("v2PaymentMethod")?.value || old.payment_method || "現金",
+    tech_rows: techRows,
+    product_amount: Number(document.getElementById("v2ProductAmount")?.value || 0),
+    course_amount: Number(document.getElementById("v2CourseAmount")?.value || 0),
+    stored_value_new_amount: Number(document.getElementById("v2StoredValueAmount")?.value || 0),
+    platform_fixed_pay: Number(document.getElementById("v2PlatformPay")?.value || 0),
+    total_received: Number(document.getElementById("v2TotalReceived")?.value || 0),
+    invoice_status: document.getElementById("v2InvoiceStatus")?.value || "未開",
+    receipt_note: document.getElementById("v2ReceiptNote")?.value || ""
+  };
+
+  const {error} = await db.from("bookings").update({checkout}).eq("id", id);
+  if(error){
+    alert("收銀儲存失敗");
+    console.error(error);
+    return;
+  }
+  alert("收銀／薪資已儲存");
+  closeBookingModal();
+  if(typeof renderBookings === "function") renderBookings();
+};
+
+document.addEventListener("input", e => {
+  if(e.target && (e.target.closest(".v3-tech-row") || e.target.closest(".tech-row") || e.target.closest(".cashier-row"))){
+    c42UpdateSalaryPreview();
+  }
+});
+
+const c42Observer = new MutationObserver(() => {
+  c42EnsureFixedPayOptions();
+  c42AddFixedPayFields();
+});
+document.addEventListener("DOMContentLoaded", () => {
+  c42Observer.observe(document.body, {childList:true, subtree:true});
+  setTimeout(() => {
+    c42EnsureFixedPayOptions();
+    c42AddFixedPayFields();
+  }, 800);
+});

@@ -13,3 +13,27 @@
     grid-template-columns:70px repeat(4,minmax(150px,1fr));
   }
 }
+
+
+/* CONSTONIC V4.2 */
+.slot-btn.disabled,
+.slot-button.disabled,
+button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+  background:#eee8db !important;
+}
+.c42-fixed-pay-field.hidden{
+  display:none !important;
+}
+.c42-fixed-pay-field input{
+  min-width:110px;
+}
+.v3-tech-row{
+  grid-template-columns:1.1fr .55fr .65fr .75fr;
+}
+@media(max-width:900px){
+  .v3-tech-row{
+    grid-template-columns:1fr;
+  }
+}
