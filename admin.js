@@ -659,3 +659,255 @@ $("date").addEventListener("change", () => { renderBookings(); renderTodayWorkli
 $("therapistFilter").addEventListener("change", renderBookings);
 $("viewMode").addEventListener("change", renderBookings);
 if (getCurrentUser()) showAdmin();
+
+
+
+/* =========================
+   CONSTONIC ADMIN V2.0 PATCH
+   房型、收銀、今日工作總覽：強制整合版
+========================= */
+
+window.CONSTONIC_ADMIN_VERSION = "V2.0";
+
+const V2_ROOM_OPTIONS = ["未指定", "201", "202", "203", "VIP301-A", "VIP301-B", "VIP302"];
+
+function v2RoomDisplay(room){
+  if(room === "VIP301-A") return "VIP301 床A";
+  if(room === "VIP301-B") return "VIP301 床B";
+  return room || "未指定";
+}
+
+function v2Money(n){
+  return Number(n || 0).toLocaleString("zh-TW");
+}
+
+function v2CheckoutDefaults(b){
+  const c = b.checkout || {};
+  const techRows = c.tech_rows || (b.items || []).map((item, idx) => ({
+    item_name: item.name || `技術${idx+1}`,
+    amount: 0,
+    rate: "30"
+  }));
+  return {
+    room: c.room || "未指定",
+    payment_status: c.payment_status || "未收款",
+    payment_method: c.payment_method || "現金",
+    tech_rows: techRows,
+    product_amount: Number(c.product_amount || 0),
+    course_amount: Number(c.course_amount || 0),
+    stored_value_new_amount: Number(c.stored_value_new_amount || 0),
+    platform_fixed_pay: Number(c.platform_fixed_pay || 0),
+    total_received: Number(c.total_received || 0),
+    invoice_status: c.invoice_status || "未開",
+    receipt_note: c.receipt_note || ""
+  };
+}
+
+function v2CheckoutTotals(c){
+  const tech30Rows = (c.tech_rows || []).filter(r => String(r.rate) === "30");
+  const tech40Rows = (c.tech_rows || []).filter(r => String(r.rate) === "40");
+  const tech30Amount = tech30Rows.reduce((s,r)=>s+Number(r.amount||0),0);
+  const tech40Amount = tech40Rows.reduce((s,r)=>s+Number(r.amount||0),0);
+  const tech30Bonus = Math.round(tech30Amount * .30);
+  const tech40Bonus = Math.round(tech40Amount * .40);
+  const productBonus = Math.round(Number(c.product_amount||0) * .10);
+  const courseBonus = Math.round((Number(c.course_amount||0)+Number(c.stored_value_new_amount||0)) * .02);
+  const platformPay = Number(c.platform_fixed_pay||0);
+  return {tech30Amount, tech40Amount, tech30Bonus, tech40Bonus, productBonus, courseBonus, platformPay, salaryTotal: tech30Bonus+tech40Bonus+productBonus+courseBonus+platformPay};
+}
+
+function v2FormatItems(items){
+  return (items || []).map((i, idx) => `${idx+1}. ${escapeHtml(i.name || "-")}（${Number(i.duration||0)}分）${i.therapist ? "｜"+escapeHtml(i.therapist) : ""}`).join("<br>");
+}
+
+function v2StatusText(status){
+  if(typeof statusText === "function") return statusText(status);
+  if(status === "pending") return "待確認";
+  if(status === "confirmed") return "已確認";
+  if(status === "cancelled") return "已取消";
+  if(status === "completed") return "已完成";
+  if(status === "nail_request") return "美甲待確認";
+  return status || "待確認";
+}
+
+function v2RenderRoomSection(b){
+  const c = v2CheckoutDefaults(b);
+  return `<div class="v2-section room-box">
+    <h3>房型安排</h3>
+    <p class="hint">VIP301 有兩張床，可同時安排兩位；請以床A／床B 分開指定。</p>
+    <div class="field">
+      <label>房型／床位</label>
+      <select id="v2RoomSelect">
+        ${V2_ROOM_OPTIONS.map(r=>`<option value="${r}" ${c.room===r ? "selected" : ""}>${v2RoomDisplay(r)}</option>`).join("")}
+      </select>
+    </div>
+    <button type="button" onclick="v2SaveRoom('${escapeHtml(b.id)}')">儲存房型</button>
+  </div>`;
+}
+
+function v2RenderCheckoutSection(b){
+  const c = v2CheckoutDefaults(b);
+  const totals = v2CheckoutTotals(c);
+  const rows = (c.tech_rows || []).map((r,idx)=>`
+    <div class="cashier-row">
+      <div class="field"><label>技術項目</label><input id="v2TechName_${idx}" value="${escapeHtml(r.item_name||"")}"></div>
+      <div class="field"><label>技術金額</label><input id="v2TechAmount_${idx}" type="number" min="0" value="${Number(r.amount||0)}"></div>
+      <div class="field"><label>抽成</label><select id="v2TechRate_${idx}">
+        <option value="30" ${String(r.rate)==="30"?"selected":""}>30%</option>
+        <option value="40" ${String(r.rate)==="40"?"selected":""}>40%</option>
+      </select></div>
+    </div>`).join("");
+
+  return `<div class="v2-section cashier-box">
+    <h3>收銀／薪資計算</h3>
+    <p class="hint">商品10%；技術可選30%或40%；新購課程／新收儲值2%；平台團購固定薪資手動輸入。</p>
+
+    <div class="form-grid">
+      <div class="field"><label>收款狀態</label><select id="v2PaymentStatus">${["已收款","部分收款","未收款"].map(v=>`<option ${c.payment_status===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label>收款方式</label><select id="v2PaymentMethod">${["現金","刷卡","匯款","LINE Pay","街口支付","Apple Pay","Google Pay","其他"].map(v=>`<option ${c.payment_method===v?"selected":""}>${v}</option>`).join("")}</select></div>
+    </div>
+
+    <h4>技術服務</h4>
+    <div id="v2TechRows" data-count="${(c.tech_rows||[]).length}">${rows}</div>
+
+    <h4>其他收入／獎金</h4>
+    <div class="form-grid">
+      <div class="field"><label>商品銷售金額（10%）</label><input id="v2ProductAmount" type="number" min="0" value="${c.product_amount}"></div>
+      <div class="field"><label>新購課程金額（2%）</label><input id="v2CourseAmount" type="number" min="0" value="${c.course_amount}"></div>
+      <div class="field"><label>新收儲值金額（2%）</label><input id="v2StoredValueAmount" type="number" min="0" value="${c.stored_value_new_amount}"></div>
+      <div class="field"><label>平台團購固定薪資</label><input id="v2PlatformPay" type="number" min="0" value="${c.platform_fixed_pay}"></div>
+      <div class="field"><label>本次實際收款</label><input id="v2TotalReceived" type="number" min="0" value="${c.total_received}"></div>
+      <div class="field"><label>發票狀態</label><select id="v2InvoiceStatus">${["未開","已開","免開"].map(v=>`<option ${c.invoice_status===v?"selected":""}>${v}</option>`).join("")}</select></div>
+    </div>
+
+    <div class="field"><label>收款備註</label><textarea id="v2ReceiptNote" rows="2">${escapeHtml(c.receipt_note||"")}</textarea></div>
+
+    <div class="cashier-summary">
+      <div>技術30%：NT$ ${v2Money(totals.tech30Bonus)}</div>
+      <div>技術40%：NT$ ${v2Money(totals.tech40Bonus)}</div>
+      <div>商品10%：NT$ ${v2Money(totals.productBonus)}</div>
+      <div>課程／儲值2%：NT$ ${v2Money(totals.courseBonus)}</div>
+      <div>平台固定：NT$ ${v2Money(totals.platformPay)}</div>
+      <strong>本次薪資合計：NT$ ${v2Money(totals.salaryTotal)}</strong>
+    </div>
+
+    <button type="button" class="primary" onclick="v2SaveCheckout('${escapeHtml(b.id)}')">儲存收銀資料</button>
+  </div>`;
+}
+
+function v2CollectCheckout(existing){
+  const count = Number(document.getElementById("v2TechRows")?.dataset.count || 0);
+  const tech_rows = [];
+  for(let i=0;i<count;i++){
+    tech_rows.push({
+      item_name: document.getElementById(`v2TechName_${i}`)?.value || "",
+      amount: Number(document.getElementById(`v2TechAmount_${i}`)?.value || 0),
+      rate: document.getElementById(`v2TechRate_${i}`)?.value || "30"
+    });
+  }
+  const checkout = {
+    ...(existing || {}),
+    room: document.getElementById("v2RoomSelect")?.value || existing?.room || "未指定",
+    payment_status: document.getElementById("v2PaymentStatus")?.value || "未收款",
+    payment_method: document.getElementById("v2PaymentMethod")?.value || "現金",
+    tech_rows,
+    product_amount: Number(document.getElementById("v2ProductAmount")?.value || 0),
+    course_amount: Number(document.getElementById("v2CourseAmount")?.value || 0),
+    stored_value_new_amount: Number(document.getElementById("v2StoredValueAmount")?.value || 0),
+    platform_fixed_pay: Number(document.getElementById("v2PlatformPay")?.value || 0),
+    total_received: Number(document.getElementById("v2TotalReceived")?.value || 0),
+    invoice_status: document.getElementById("v2InvoiceStatus")?.value || "未開",
+    receipt_note: document.getElementById("v2ReceiptNote")?.value || ""
+  };
+  checkout.calculated = v2CheckoutTotals(checkout);
+  return checkout;
+}
+
+async function v2SaveRoom(id){
+  const booking = (currentBookings || []).find(b=>b.id===id) || {};
+  const checkout = {...(booking.checkout || {}), room: document.getElementById("v2RoomSelect")?.value || "未指定"};
+  const {error} = await db.from("bookings").update({checkout}).eq("id", id);
+  if(error){ alert("房型儲存失敗"); console.error(error); return; }
+  alert("房型已儲存");
+  if(typeof renderBookings==="function") renderBookings();
+  if(typeof v2RenderTodayWorklist==="function") v2RenderTodayWorklist();
+}
+
+async function v2SaveCheckout(id){
+  const booking = (currentBookings || []).find(b=>b.id===id) || {};
+  const checkout = v2CollectCheckout(booking.checkout || {});
+  const {error} = await db.from("bookings").update({checkout, status:"completed"}).eq("id", id);
+  if(error){ alert("收銀資料儲存失敗"); console.error(error); return; }
+  alert("收銀資料已儲存，狀態已改為已完成");
+  closeBookingModal();
+  if(typeof renderBookings==="function") renderBookings();
+  if(typeof v2RenderTodayWorklist==="function") v2RenderTodayWorklist();
+  if(typeof renderMonthlyReport==="function") renderMonthlyReport();
+}
+
+window.openBookingModal = function(id){
+  const b = (currentBookings || []).find(x=>x.id===id);
+  if(!b){ alert("找不到這筆預約"); return; }
+  const modal = document.getElementById("bookingModal");
+  const body = document.getElementById("bookingModalBody");
+  if(!modal || !body){ alert("後台彈窗元件不存在，請確認 admin.html 已更新到 V2.0"); return; }
+
+  const nail = b.nail_request || null;
+  body.innerHTML = `<h2>預約完整資料</h2>
+    <div class="v2-booking-detail">
+      <p><strong>預約時間：</strong>${escapeHtml(b.date)} ${escapeHtml(b.slot)}</p>
+      <p><strong>客戶姓名：</strong>${escapeHtml(b.customer_name || "-")}</p>
+      <p><strong>電話：</strong>${escapeHtml(b.phone || "-")}</p>
+      <p><strong>LINE：</strong>${escapeHtml(b.line_name || "-")}</p>
+      <p><strong>第一次來店：</strong>${escapeHtml(b.first_visit || "-")}</p>
+      <p><strong>美容師：</strong>${escapeHtml(b.therapist || "-")}</p>
+      <p><strong>預約項目：</strong><br>${v2FormatItems(b.items)}</p>
+      ${nail ? `<p><strong>美甲申請：</strong><br>希望時段：${escapeHtml(nail.preferred_period||"-")}<br>指定時間：${escapeHtml(nail.preferred_time||"-")}<br>手部/足部：${escapeHtml(nail.part||"-")}<br>樣式：${escapeHtml(nail.style||"-")}<br>備註：${escapeHtml(nail.nail_note||"-")}</p>` : ""}
+      <p><strong>時間保留：</strong>療程 ${Number(b.service_minutes||0)} 分｜整理 ${Number(b.internal_buffer||0)} 分｜保留 ${Number(b.total_block||0)} 分</p>
+      <p><strong>備註：</strong>${escapeHtml(b.note || "-")}</p>
+      <p><strong>狀態：</strong>${v2StatusText(b.status)}</p>
+    </div>
+    ${v2RenderRoomSection(b)}
+    ${v2RenderCheckoutSection(b)}
+    <div class="modal-actions">
+      <button onclick="updateStatus('${escapeHtml(b.id)}','confirmed')">已確認</button>
+      <button onclick="updateStatus('${escapeHtml(b.id)}','cancelled')">取消</button>
+      <button onclick="deleteBooking('${escapeHtml(b.id)}')">刪除</button>
+    </div>`;
+  modal.classList.remove("hidden");
+};
+
+async function v2RenderTodayWorklist(){
+  const content = document.getElementById("todayWorklistContent");
+  if(!content) return;
+  const dateValue = document.getElementById("date")?.value || new Date().toISOString().slice(0,10);
+  const {data,error} = await db.from("bookings").select("*").eq("date", dateValue).order("slot", {ascending:true});
+  if(error){ content.innerHTML = "今日工作清單讀取失敗。"; console.error(error); return; }
+  const rows = data || [];
+  const active = rows.filter(b=>b.status!=="cancelled");
+  const unpaid = active.filter(b=>b.status!=="completed");
+  const noRoom = active.filter(b=>!b.checkout?.room || b.checkout?.room==="未指定");
+  content.className = "today-worklist";
+  if(!active.length){ content.innerHTML = "這一天目前沒有預約。"; return; }
+  content.innerHTML = `<div class="worklist-stats">
+    <div class="stat-card"><div class="stat-value">${active.length}</div><div class="stat-label">今日預約</div></div>
+    <div class="stat-card"><div class="stat-value">${unpaid.length}</div><div class="stat-label">未完成收銀</div></div>
+    <div class="stat-card"><div class="stat-value">${noRoom.length}</div><div class="stat-label">未安排房型</div></div>
+  </div>
+  <div class="worklist-list">${active.map(b=>`<div class="worklist-item ${typeof therapistClass==="function"?therapistClass(b.therapist):""}" onclick="openBookingModal('${escapeHtml(b.id)}')">
+    <div class="booking-color-strip"></div>
+    <strong>${escapeHtml(b.slot)}｜${escapeHtml(b.customer_name||"-")}</strong>
+    <div>${escapeHtml(b.therapist||"-")}｜${v2RoomDisplay(b.checkout?.room)}</div>
+    <div class="hint">${v2StatusText(b.status)}｜${v2FormatItems(b.items)}</div>
+  </div>`).join("")}</div>`;
+}
+
+const v2OriginalRenderBookings = window.renderBookings || renderBookings;
+if(typeof v2OriginalRenderBookings === "function"){
+  window.renderBookings = async function(){
+    await v2OriginalRenderBookings();
+    setTimeout(()=>{ v2RenderTodayWorklist(); if(typeof renderMonthlyReport==="function") renderMonthlyReport(); }, 100);
+  };
+}
+
+setTimeout(()=>{ v2RenderTodayWorklist(); }, 800);

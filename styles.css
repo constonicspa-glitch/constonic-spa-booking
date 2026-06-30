@@ -440,3 +440,89 @@ footer{text-align:center;color:#8a765a;padding:28px;letter-spacing:1px}
 @media(max-width:760px){
   .worklist-stats{grid-template-columns:1fr}
 }
+
+
+/* CONSTONIC ADMIN V2.0 */
+.version-badge{
+  display:inline-block;
+  font-size:14px;
+  padding:3px 8px;
+  border-radius:999px;
+  background:rgba(185,144,60,.16);
+  color:var(--deepgold);
+  vertical-align:middle;
+}
+.wide-modal{
+  max-width:920px;
+}
+.modal-close{
+  float:right;
+  width:auto;
+  border-radius:999px;
+  padding:6px 12px;
+}
+.v2-section{
+  margin-top:18px;
+}
+.room-box{
+  margin-top:18px;
+  padding:18px;
+  border:1px solid rgba(40,120,215,.24);
+  border-radius:22px;
+  background:linear-gradient(135deg,#fffdf8,#f4f8ff);
+}
+.room-box h3{margin:0 0 10px;color:var(--green)}
+.cashier-box{
+  margin-top:18px;
+  padding:18px;
+  border:1px solid rgba(185,144,60,.32);
+  border-radius:22px;
+  background:linear-gradient(135deg,#fffdf8,#f7edd7);
+}
+.cashier-box h3{margin:0 0 10px;color:var(--green)}
+.cashier-box h4{margin:18px 0 10px;color:var(--deepgold)}
+.cashier-row{
+  display:grid;
+  grid-template-columns:1.5fr 1fr .8fr;
+  gap:10px;
+  padding:12px;
+  border:1px solid rgba(185,144,60,.22);
+  border-radius:16px;
+  margin-bottom:10px;
+  background:rgba(255,253,248,.78);
+}
+.cashier-summary{
+  display:grid;
+  gap:6px;
+  margin:16px 0;
+  padding:14px;
+  border-radius:16px;
+  background:rgba(32,61,50,.06);
+}
+.cashier-summary strong{color:var(--green);font-size:18px}
+.v2-dashboard{
+  border-color:rgba(32,61,50,.18);
+}
+.today-worklist{display:grid;gap:14px}
+.worklist-stats{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.worklist-list{display:grid;gap:10px}
+.worklist-item{
+  position:relative;
+  padding:14px 14px 14px 18px;
+  border:1px solid rgba(185,144,60,.26);
+  border-radius:18px;
+  background:linear-gradient(135deg,#fffdf8,#f7edd7);
+  cursor:pointer;
+}
+.worklist-item:hover{
+  transform:translateY(-1px);
+  box-shadow:0 10px 22px rgba(73,49,23,.12);
+}
+@media(max-width:760px){
+  .cashier-row{grid-template-columns:1fr}
+  .worklist-stats{grid-template-columns:1fr}
+}
