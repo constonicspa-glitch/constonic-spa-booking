@@ -719,3 +719,199 @@ button:disabled{
     grid-template-columns:1fr;
   }
 }
+
+
+/* CONSTONIC ADMIN V3.0 - Responsive SPA/POS */
+.modal{
+  align-items:center;
+  justify-content:center;
+}
+.modal-content,
+.modal-content.wide-modal{
+  width:min(96vw, 1180px) !important;
+  max-height:92vh !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  border-radius:24px !important;
+}
+.v3-modal{
+  display:flex;
+  flex-direction:column;
+  height:92vh;
+  max-height:92vh;
+  background:#fffaf0;
+}
+.v3-modal-header{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  padding:18px 22px;
+  border-bottom:1px solid rgba(185,144,60,.22);
+  background:linear-gradient(135deg,#fffdf8,#f7edd7);
+}
+.v3-modal-header h2{
+  margin:4px 0 0;
+  color:var(--green);
+  font-size:clamp(20px,2.4vw,30px);
+}
+.v3-modal-body{
+  flex:1;
+  min-height:0;
+  overflow:auto;
+  display:grid;
+  grid-template-columns:minmax(320px, .9fr) minmax(420px, 1.1fr);
+  gap:16px;
+  padding:16px;
+}
+.v3-left,
+.v3-right{
+  min-width:0;
+  display:grid;
+  gap:16px;
+  align-content:start;
+}
+.v3-panel{
+  border:1px solid rgba(185,144,60,.24);
+  border-radius:22px;
+  background:#fffdf8;
+  padding:16px;
+}
+.v3-panel h3{
+  margin:0 0 12px;
+  color:var(--green);
+}
+.v3-info-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.v3-info-grid div,
+.v3-note-block{
+  border:1px solid rgba(185,144,60,.16);
+  border-radius:14px;
+  padding:10px 12px;
+  background:#fffaf0;
+}
+.v3-info-grid span,
+.v3-note-block span{
+  display:block;
+  color:var(--green);
+  font-weight:700;
+  font-size:14px;
+}
+.v3-info-grid strong,
+.v3-note-block p{
+  display:block;
+  margin:5px 0 0;
+  color:var(--brown);
+}
+.v3-note-block{
+  margin-top:10px;
+}
+.v3-cashier-head,
+.v3-money-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.v3-collapse{
+  margin-top:12px;
+  border:1px solid rgba(185,144,60,.22);
+  border-radius:16px;
+  overflow:hidden;
+  background:#fffaf0;
+}
+.v3-collapse summary{
+  cursor:pointer;
+  padding:12px 14px;
+  font-weight:700;
+  color:var(--green);
+  background:rgba(185,144,60,.08);
+}
+.v3-tech-list,
+.v3-collapse .v3-money-grid,
+.v3-collapse .field{
+  padding:12px;
+}
+.v3-tech-row{
+  display:grid;
+  grid-template-columns:1.2fr .8fr .65fr;
+  gap:10px;
+  padding:10px;
+  border:1px solid rgba(185,144,60,.16);
+  border-radius:14px;
+  background:#fffdf8;
+  margin-bottom:10px;
+}
+.v3-salary-card{
+  margin-top:14px;
+  padding:14px;
+  border-radius:18px;
+  background:rgba(32,61,50,.06);
+  display:grid;
+  gap:8px;
+}
+.v3-salary-card div{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+}
+.v3-salary-card .total{
+  padding-top:8px;
+  border-top:1px solid rgba(32,61,50,.18);
+  color:var(--green);
+  font-size:18px;
+}
+.v3-modal-footer{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+  padding:12px 16px;
+  border-top:1px solid rgba(185,144,60,.22);
+  background:#fffaf0;
+}
+.v3-modal-footer button{
+  padding:11px 10px;
+  border-radius:16px;
+}
+
+/* 平板 */
+@media(max-width:980px){
+  .v3-modal-body{
+    grid-template-columns:1fr;
+  }
+  .v3-modal{
+    height:90vh;
+    max-height:90vh;
+  }
+}
+
+/* 手機 */
+@media(max-width:640px){
+  .modal-content,
+  .modal-content.wide-modal{
+    width:97vw !important;
+    max-height:92vh !important;
+    border-radius:18px !important;
+  }
+  .v3-modal{
+    height:92vh;
+  }
+  .v3-modal-header{
+    padding:14px;
+  }
+  .v3-modal-body{
+    padding:12px;
+    gap:12px;
+  }
+  .v3-info-grid,
+  .v3-cashier-head,
+  .v3-money-grid,
+  .v3-tech-row{
+    grid-template-columns:1fr;
+  }
+  .v3-modal-footer{
+    grid-template-columns:repeat(2,1fr);
+    gap:8px;
+  }
+}

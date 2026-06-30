@@ -1134,3 +1134,210 @@ window.openBookingModal = function(id){
   </div>`;
   modal.classList.remove("hidden");
 };
+
+
+
+/* =========================
+   CONSTONIC ADMIN V3.0
+   Responsive SPA/POS Layout
+   電腦左右分欄／平板手機自動收放
+========================= */
+
+window.CONSTONIC_ADMIN_VERSION = "V3.0";
+
+function v3SafeStatus(status){
+  if(typeof v2StatusText === "function") return v2StatusText(status);
+  if(typeof statusText === "function") return statusText(status);
+  if(status === "pending") return "待確認";
+  if(status === "confirmed") return "已確認";
+  if(status === "cancelled") return "已取消";
+  if(status === "completed") return "已完成";
+  if(status === "nail_request") return "美甲待確認";
+  return status || "待確認";
+}
+
+function v3Items(items){
+  if(typeof v2FormatItems === "function") return v2FormatItems(items);
+  return (items || []).map((i, idx) => `${idx+1}. ${escapeHtml(i.name || "-")}（${Number(i.duration||0)}分）${i.therapist ? "｜"+escapeHtml(i.therapist) : ""}`).join("<br>");
+}
+
+function v3CheckoutDefaults(b){
+  if(typeof v2CheckoutDefaults === "function") return v2CheckoutDefaults(b);
+  const c = b.checkout || {};
+  return {
+    room: c.room || "未指定",
+    payment_status: c.payment_status || "未收款",
+    payment_method: c.payment_method || "現金",
+    tech_rows: c.tech_rows || (b.items || []).map((item, idx)=>({ item_name:item.name || `技術${idx+1}`, amount:0, rate:"30" })),
+    product_amount: Number(c.product_amount || 0),
+    course_amount: Number(c.course_amount || 0),
+    stored_value_new_amount: Number(c.stored_value_new_amount || 0),
+    platform_fixed_pay: Number(c.platform_fixed_pay || 0),
+    total_received: Number(c.total_received || 0),
+    invoice_status: c.invoice_status || "未開",
+    receipt_note: c.receipt_note || ""
+  };
+}
+
+function v3Totals(c){
+  if(typeof v2CheckoutTotals === "function") return v2CheckoutTotals(c);
+  const tech30 = (c.tech_rows || []).filter(r=>String(r.rate)==="30").reduce((s,r)=>s+Number(r.amount||0),0);
+  const tech40 = (c.tech_rows || []).filter(r=>String(r.rate)==="40").reduce((s,r)=>s+Number(r.amount||0),0);
+  const tech30Bonus = Math.round(tech30*.3);
+  const tech40Bonus = Math.round(tech40*.4);
+  const productBonus = Math.round(Number(c.product_amount||0)*.1);
+  const courseBonus = Math.round((Number(c.course_amount||0)+Number(c.stored_value_new_amount||0))*.02);
+  const platformPay = Number(c.platform_fixed_pay||0);
+  return {tech30Bonus, tech40Bonus, productBonus, courseBonus, platformPay, salaryTotal: tech30Bonus+tech40Bonus+productBonus+courseBonus+platformPay};
+}
+
+function v3Money(n){
+  if(typeof v2Money === "function") return v2Money(n);
+  return Number(n||0).toLocaleString("zh-TW");
+}
+
+function v3RoomDisplay(room){
+  if(typeof v2RoomDisplay === "function") return v2RoomDisplay(room);
+  if(room === "VIP301-A") return "VIP301 床A";
+  if(room === "VIP301-B") return "VIP301 床B";
+  return room || "未指定";
+}
+
+function v3RoomSection(b){
+  const c = v3CheckoutDefaults(b);
+  const rooms = ["未指定","201","202","203","VIP301-A","VIP301-B","VIP302"];
+  return `<div class="v3-panel">
+    <h3>房型安排</h3>
+    <p class="hint">VIP301 有兩張床，可同時安排兩位，請分床A／床B。</p>
+    <div class="field">
+      <label>房型／床位</label>
+      <select id="v2RoomSelect">
+        ${rooms.map(r=>`<option value="${r}" ${c.room===r?"selected":""}>${v3RoomDisplay(r)}</option>`).join("")}
+      </select>
+    </div>
+    <button type="button" onclick="v2SaveRoom('${escapeHtml(b.id)}')">儲存房型</button>
+  </div>`;
+}
+
+function v3DetailSection(b){
+  const nail = b.nail_request || null;
+  return `<div class="v3-panel">
+    <h3>預約資料</h3>
+    <div class="v3-info-grid">
+      <div><span>日期時間</span><strong>${escapeHtml(b.date)} ${escapeHtml(b.slot)}</strong></div>
+      <div><span>姓名</span><strong>${escapeHtml(b.customer_name || "-")}</strong></div>
+      <div><span>電話</span><strong>${escapeHtml(b.phone || "-")}</strong></div>
+      <div><span>LINE</span><strong>${escapeHtml(b.line_name || "-")}</strong></div>
+      <div><span>美容師</span><strong>${escapeHtml(b.therapist || "-")}</strong></div>
+      <div><span>狀態</span><strong>${v3SafeStatus(b.status)}</strong></div>
+      <div><span>第一次</span><strong>${escapeHtml(b.first_visit || "-")}</strong></div>
+      <div><span>房型</span><strong>${v3RoomDisplay(b.checkout?.room)}</strong></div>
+    </div>
+    <div class="v3-note-block">
+      <span>預約項目</span>
+      <p>${v3Items(b.items)}</p>
+    </div>
+    <div class="v3-note-block">
+      <span>時間保留</span>
+      <p>療程 ${Number(b.service_minutes||0)} 分｜整理 ${Number(b.internal_buffer||0)} 分｜保留 ${Number(b.total_block||0)} 分</p>
+    </div>
+    ${nail ? `<div class="v3-note-block">
+      <span>美甲申請</span>
+      <p>希望時段：${escapeHtml(nail.preferred_period||"-")}<br>指定時間：${escapeHtml(nail.preferred_time||"-")}<br>手部/足部：${escapeHtml(nail.part||"-")}<br>樣式：${escapeHtml(nail.style||"-")}<br>備註：${escapeHtml(nail.nail_note||"-")}</p>
+    </div>` : ""}
+    <div class="v3-note-block">
+      <span>備註</span>
+      <p>${escapeHtml(b.note || "-")}</p>
+    </div>
+  </div>`;
+}
+
+function v3CashierSection(b){
+  const c = v3CheckoutDefaults(b);
+  const t = v3Totals(c);
+  const rows = (c.tech_rows || []).map((r,idx)=>`
+    <div class="v3-tech-row">
+      <div class="field"><label>項目</label><input id="v2TechName_${idx}" value="${escapeHtml(r.item_name||"")}"></div>
+      <div class="field"><label>金額</label><input id="v2TechAmount_${idx}" type="number" min="0" value="${Number(r.amount||0)}"></div>
+      <div class="field"><label>抽成</label><select id="v2TechRate_${idx}">
+        <option value="30" ${String(r.rate)==="30"?"selected":""}>30%</option>
+        <option value="40" ${String(r.rate)==="40"?"selected":""}>40%</option>
+      </select></div>
+    </div>`).join("");
+
+  return `<div class="v3-panel v3-cashier-panel">
+    <h3>收銀／薪資</h3>
+    <div class="v3-cashier-head">
+      <div class="field"><label>收款狀態</label><select id="v2PaymentStatus">${["已收款","部分收款","未收款"].map(v=>`<option ${c.payment_status===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label>收款方式</label><select id="v2PaymentMethod">${["現金","刷卡","匯款","LINE Pay","街口支付","Apple Pay","Google Pay","其他"].map(v=>`<option ${c.payment_method===v?"selected":""}>${v}</option>`).join("")}</select></div>
+    </div>
+
+    <details open class="v3-collapse">
+      <summary>技術服務</summary>
+      <div id="v2TechRows" data-count="${(c.tech_rows||[]).length}" class="v3-tech-list">${rows}</div>
+    </details>
+
+    <details class="v3-collapse">
+      <summary>商品／課程／儲值／平台</summary>
+      <div class="v3-money-grid">
+        <div class="field"><label>商品10%</label><input id="v2ProductAmount" type="number" min="0" value="${c.product_amount}"></div>
+        <div class="field"><label>新課程2%</label><input id="v2CourseAmount" type="number" min="0" value="${c.course_amount}"></div>
+        <div class="field"><label>新儲值2%</label><input id="v2StoredValueAmount" type="number" min="0" value="${c.stored_value_new_amount}"></div>
+        <div class="field"><label>平台固定</label><input id="v2PlatformPay" type="number" min="0" value="${c.platform_fixed_pay}"></div>
+        <div class="field"><label>本次實收</label><input id="v2TotalReceived" type="number" min="0" value="${c.total_received}"></div>
+        <div class="field"><label>發票</label><select id="v2InvoiceStatus">${["未開","已開","免開"].map(v=>`<option ${c.invoice_status===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      </div>
+      <div class="field"><label>備註</label><textarea id="v2ReceiptNote" rows="2">${escapeHtml(c.receipt_note||"")}</textarea></div>
+    </details>
+
+    <div class="v3-salary-card">
+      <div><span>技術30%</span><strong>NT$ ${v3Money(t.tech30Bonus)}</strong></div>
+      <div><span>技術40%</span><strong>NT$ ${v3Money(t.tech40Bonus)}</strong></div>
+      <div><span>商品10%</span><strong>NT$ ${v3Money(t.productBonus)}</strong></div>
+      <div><span>課程／儲值2%</span><strong>NT$ ${v3Money(t.courseBonus)}</strong></div>
+      <div><span>平台固定</span><strong>NT$ ${v3Money(t.platformPay)}</strong></div>
+      <div class="total"><span>本次薪資</span><strong>NT$ ${v3Money(t.salaryTotal)}</strong></div>
+    </div>
+  </div>`;
+}
+
+window.openBookingModal = function(id){
+  const b = (currentBookings || []).find(x=>x.id===id);
+  if(!b){ alert("找不到這筆預約"); return; }
+
+  const modal = document.getElementById("bookingModal");
+  const body = document.getElementById("bookingModalBody");
+  if(!modal || !body){
+    alert("後台彈窗元件不存在，請確認 admin.html 已更新到 V3.0");
+    return;
+  }
+
+  body.innerHTML = `<div class="v3-modal">
+    <header class="v3-modal-header">
+      <div>
+        <p class="eyebrow">CONSTONIC ADMIN V3.0</p>
+        <h2>${escapeHtml(b.customer_name || "-")}｜${escapeHtml(b.date)} ${escapeHtml(b.slot)}</h2>
+      </div>
+      <button class="modal-close" onclick="closeBookingModal()">×</button>
+    </header>
+
+    <main class="v3-modal-body">
+      <section class="v3-left">
+        ${v3DetailSection(b)}
+        ${v3RoomSection(b)}
+      </section>
+      <section class="v3-right">
+        ${v3CashierSection(b)}
+      </section>
+    </main>
+
+    <footer class="v3-modal-footer">
+      <button onclick="updateStatus('${escapeHtml(b.id)}','confirmed')">已確認</button>
+      <button onclick="updateStatus('${escapeHtml(b.id)}','cancelled')">取消</button>
+      <button onclick="deleteBooking('${escapeHtml(b.id)}')">刪除</button>
+      <button class="primary" onclick="v2SaveCheckout('${escapeHtml(b.id)}')">儲存收銀</button>
+    </footer>
+  </div>`;
+
+  modal.classList.remove("hidden");
+};
