@@ -724,3 +724,75 @@ document.addEventListener("change", e => {
     }, 150);
   }
 });
+
+
+/* =========================
+   CONSTONIC FRONT V4.3
+   美甲諮詢模式修正：
+   - 只要本次預約清單含美甲／曼曼美甲師，就不顯示固定可預約時段
+   - 其他 SPA / 臉部 / 身體仍照常顯示時間
+========================= */
+
+window.CONSTONIC_FRONT_VERSION = "V4.3";
+
+function c43IsNailItem(item){
+  const text = [
+    item?.name,
+    item?.category,
+    item?.therapist,
+    item?.type
+  ].map(v => String(v || "")).join(" ");
+  return /美甲|指甲|卸甲|手部|足部|單色|造型|曼曼/.test(text);
+}
+
+function c43HasNailInCart(){
+  try{
+    const list = Array.isArray(window.cart) ? window.cart : (typeof cart !== "undefined" && Array.isArray(cart) ? cart : []);
+    return list.some(c43IsNailItem);
+  }catch(e){
+    return false;
+  }
+}
+
+function c43RenderNailConsultSlots(){
+  const box = document.getElementById("slotList") || document.getElementById("slots") || document.querySelector(".slot-list");
+  if(!box) return false;
+
+  if(!c43HasNailInCart()) return false;
+
+  box.innerHTML = `
+    <div class="nail-consult-box">
+      <strong>美甲採諮詢預約制</strong>
+      <p>因美甲時間會依手部／足部、卸甲、單色或造型而不同，請送出希望日期與需求，店家會再與您確認正式時間。</p>
+      <div class="nail-consult-tags">
+        <span>希望日期</span>
+        <span>上午／下午／晚上</span>
+        <span>手部／足部</span>
+        <span>單色／造型／卸甲</span>
+      </div>
+    </div>
+  `;
+  return true;
+}
+
+const c43OldRenderSlots = typeof renderSlots === "function" ? renderSlots : null;
+window.renderSlots = async function(){
+  if(c43RenderNailConsultSlots()) return;
+  if(typeof c42RenderSlots === "function"){
+    const handled = await c42RenderSlots();
+    if(handled) return;
+  }
+  if(c43OldRenderSlots) return c43OldRenderSlots();
+};
+
+document.addEventListener("click", () => {
+  setTimeout(() => {
+    if(typeof renderSlots === "function") renderSlots();
+  }, 150);
+});
+
+document.addEventListener("change", () => {
+  setTimeout(() => {
+    if(typeof renderSlots === "function") renderSlots();
+  }, 150);
+});

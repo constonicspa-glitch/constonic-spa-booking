@@ -37,3 +37,44 @@ button:disabled{
     grid-template-columns:1fr;
   }
 }
+
+
+/* CONSTONIC V4.3 */
+.nail-consult-box{
+  padding:18px 20px;
+  border:1px solid rgba(185,144,60,.28);
+  border-radius:20px;
+  background:#fff7e6;
+  color:var(--brown);
+}
+.nail-consult-box strong{
+  display:block;
+  color:var(--green);
+  font-size:20px;
+  margin-bottom:8px;
+}
+.nail-consult-box p{
+  margin:0 0 12px;
+  line-height:1.7;
+}
+.nail-consult-tags{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.nail-consult-tags span{
+  padding:8px 12px;
+  border-radius:999px;
+  background:#fffdf8;
+  border:1px solid rgba(185,144,60,.25);
+  font-weight:700;
+}
+.c43-fixed-note{
+  grid-column:1/-1;
+  padding:8px 10px;
+  border-radius:12px;
+  background:#fff7e6;
+  color:var(--brown);
+  font-weight:700;
+  font-size:14px;
+}

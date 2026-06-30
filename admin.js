@@ -710,3 +710,131 @@ document.addEventListener("DOMContentLoaded", () => {
     c42AddFixedPayFields();
   }, 800);
 });
+
+
+/* =========================
+   CONSTONIC ADMIN V4.3
+   技術服務固定薪資修正：
+   - 抽成選單強制加入「固定薪資」
+   - 選固定薪資時，金額欄位代表員工固定獎金
+   - 薪資統計會把固定薪資列入本次薪資
+========================= */
+
+window.CONSTONIC_ADMIN_VERSION = "V4.3";
+
+function c43EnsureRateOptions(){
+  document.querySelectorAll('select[id*="TechRate"], select[data-rate-select]').forEach(sel => {
+    const values = Array.from(sel.options).map(o => o.value);
+    if(!values.includes("30")){
+      const o = document.createElement("option");
+      o.value = "30"; o.textContent = "30%";
+      sel.appendChild(o);
+    }
+    if(!values.includes("40")){
+      const o = document.createElement("option");
+      o.value = "40"; o.textContent = "40%";
+      sel.appendChild(o);
+    }
+    if(!values.includes("fixed")){
+      const o = document.createElement("option");
+      o.value = "fixed"; o.textContent = "固定薪資";
+      sel.appendChild(o);
+    }
+  });
+}
+
+function c43SalaryFromRows(){
+  let tech30 = 0, tech40 = 0, fixed = 0;
+  const rows = Array.from(document.querySelectorAll(".v3-tech-row, .tech-row, .cashier-row"));
+  rows.forEach((row, idx) => {
+    const amountInput = row.querySelector('input[id*="TechAmount"]') || row.querySelector('input[type="number"]');
+    const rateSelect = row.querySelector('select[id*="TechRate"], select[data-rate-select]');
+    const amount = Number(amountInput?.value || 0);
+    const rate = rateSelect?.value || "30";
+    if(rate === "30") tech30 += Math.round(amount * 0.3);
+    if(rate === "40") tech40 += Math.round(amount * 0.4);
+    if(rate === "fixed") fixed += amount;
+  });
+  return {tech30, tech40, fixed};
+}
+
+function c43PatchSalaryBox(){
+  const box = document.querySelector(".v3-salary-card, .salary-summary");
+  if(!box) return;
+
+  if(!box.querySelector(".c43-fixed-salary-row")){
+    const row = document.createElement("div");
+    row.className = "c43-fixed-salary-row";
+    row.innerHTML = `<span>固定薪資</span><strong>NT$ 0</strong>`;
+    const total = box.querySelector(".total");
+    if(total) box.insertBefore(row, total);
+    else box.appendChild(row);
+  }
+
+  const salary = c43SalaryFromRows();
+  const fixedEl = box.querySelector(".c43-fixed-salary-row strong");
+  if(fixedEl) fixedEl.textContent = "NT$ " + Number(salary.fixed || 0).toLocaleString("zh-TW");
+
+  const rows = Array.from(box.querySelectorAll("div"));
+  rows.forEach(row => {
+    if(row.textContent.includes("技術30%")){
+      const strong = row.querySelector("strong");
+      if(strong) strong.textContent = "NT$ " + Number(salary.tech30 || 0).toLocaleString("zh-TW");
+    }
+    if(row.textContent.includes("技術40%")){
+      const strong = row.querySelector("strong");
+      if(strong) strong.textContent = "NT$ " + Number(salary.tech40 || 0).toLocaleString("zh-TW");
+    }
+  });
+
+  const getMoney = label => {
+    const row = rows.find(r => r.textContent.includes(label));
+    return Number(String(row?.querySelector("strong")?.textContent || "0").replace(/[^\d.-]/g,"") || 0);
+  };
+  const totalEl = box.querySelector(".total strong");
+  if(totalEl){
+    const total = salary.tech30 + salary.tech40 + salary.fixed + getMoney("商品") + getMoney("課程") + getMoney("平台");
+    totalEl.textContent = "NT$ " + Number(total || 0).toLocaleString("zh-TW");
+  }
+}
+
+function c43PatchTechRows(){
+  c43EnsureRateOptions();
+
+  document.querySelectorAll('select[id*="TechRate"], select[data-rate-select]').forEach(sel => {
+    if(sel.dataset.c43Patched) return;
+    sel.dataset.c43Patched = "1";
+    sel.addEventListener("change", () => {
+      const row = sel.closest(".v3-tech-row, .tech-row, .cashier-row");
+      const label = row?.querySelector(".c43-fixed-note");
+      if(sel.value === "fixed"){
+        if(!label){
+          const note = document.createElement("div");
+          note.className = "c43-fixed-note";
+          note.textContent = "固定薪資：金額欄請直接填員工獎金";
+          row.appendChild(note);
+        }
+      }else{
+        label?.remove();
+      }
+      c43PatchSalaryBox();
+    });
+  });
+
+  document.querySelectorAll(".v3-tech-row input, .tech-row input, .cashier-row input").forEach(input => {
+    if(input.dataset.c43Patched) return;
+    input.dataset.c43Patched = "1";
+    input.addEventListener("input", c43PatchSalaryBox);
+  });
+
+  c43PatchSalaryBox();
+}
+
+const c43Observer = new MutationObserver(() => c43PatchTechRows());
+document.addEventListener("DOMContentLoaded", () => {
+  c43Observer.observe(document.body, {childList:true, subtree:true});
+  setTimeout(c43PatchTechRows, 500);
+  setTimeout(c43PatchTechRows, 1500);
+});
+
+setTimeout(c43PatchTechRows, 1000);
