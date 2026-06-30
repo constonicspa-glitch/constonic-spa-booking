@@ -42,17 +42,19 @@ function showAdmin() {
   $("therapistFilter").disabled = false;
   setupRealtime();
   renderBookings();
+  renderPendingCenter();
 }
 function setupRealtime() {
   if (realtimeChannel) return;
   realtimeChannel = db.channel("constonic-bookings-realtime")
-    .on("postgres_changes", { event:"*", schema:"public", table:"bookings" }, () => renderBookings())
+    .on("postgres_changes", { event:"*", schema:"public", table:"bookings" }, () => { renderBookings(); renderPendingCenter(); })
     .subscribe();
 }
 function statusText(status) {
   if (status === "pending") return "待確認";
   if (status === "confirmed") return "已確認";
   if (status === "cancelled") return "已取消";
+  if (status === "nail_request") return "美甲待確認";
   return status || "待確認";
 }
 function therapistClass(name) { return therapistClassMap[name] || "therapist-none"; }
@@ -103,6 +105,44 @@ async function renderStats(date, bookings) {
   const uniqueCustomers = new Set((data || []).map(b=>b.phone).filter(Boolean)).size;
   box.innerHTML = statCard("當日預約人數", active.length) + statCard("待確認", pending) + statCard("已確認", confirmed) + statCard("整月來店數", monthVisits, `不重複顧客 ${uniqueCustomers} 位`);
 }
+
+async function renderPendingCenter(){
+  const box = $("pendingCenter");
+  if(!box) return;
+  const { data, error } = await db
+    .from("bookings")
+    .select("*")
+    .in("status", ["pending", "nail_request"])
+    .order("date", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if(error){
+    box.innerHTML = "讀取待確認資料失敗。";
+    console.error(error);
+    return;
+  }
+  const rows = data || [];
+  if(!rows.length){
+    box.className = "pending-center muted";
+    box.innerHTML = "目前沒有待確認預約。";
+    return;
+  }
+  box.className = "pending-center";
+  box.innerHTML = rows.map(b => {
+    const nail = b.nail_request || {};
+    const nailText = b.status === "nail_request"
+      ? `<div class="hint">美甲需求：${escapeHtml(nail.part || "-")}｜${escapeHtml(nail.style || "-")}｜${escapeHtml(nail.preferred_period || "-")}｜${escapeHtml(nail.preferred_time || "-")}</div>`
+      : "";
+    return `<div class="pending-card ${therapistClass(b.therapist)}" onclick="openBookingModal('${escapeHtml(b.id)}')">
+      <div class="booking-color-strip"></div>
+      <strong>${escapeHtml(b.date)}｜${escapeHtml(b.slot)}｜${escapeHtml(b.customer_name)}</strong>
+      <div>${formatItems(b.items, true)}</div>
+      ${nailText}
+      <div class="hint">${statusText(b.status)}</div>
+    </div>`;
+  }).join("");
+}
+
 async function renderBookings() {
   const user = getCurrentUser(); if (!user) return;
   const date = $("date").value;
@@ -158,6 +198,13 @@ function openBookingModal(id) {
     <p><strong>美容師：</strong>${escapeHtml(b.therapist)}</p>
     <p><strong>預約項目：</strong><br>${formatItems(b.items)}</p>
     <p><strong>時間保留：</strong>療程 ${Number(b.service_minutes||0)} 分｜整理 ${Number(b.internal_buffer||0)} 分｜保留 ${Number(b.total_block||0)} 分</p>
+    ${b.nail_request ? `<p><strong>美甲申請：</strong><br>
+      希望時段：${escapeHtml(b.nail_request.preferred_period || "-")}<br>
+      指定時間：${escapeHtml(b.nail_request.preferred_time || "-")}<br>
+      手部/足部：${escapeHtml(b.nail_request.part || "-")}<br>
+      樣式：${escapeHtml(b.nail_request.style || "-")}<br>
+      美甲備註：${escapeHtml(b.nail_request.nail_note || "-")}
+    </p>` : ""}
     <p><strong>備註：</strong>${escapeHtml(b.note || "-")}</p>
     <p><strong>狀態：</strong>${statusText(b.status)}</p>
     <div class="booking-actions">

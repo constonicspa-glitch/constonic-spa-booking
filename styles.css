@@ -321,3 +321,17 @@ footer{text-align:center;color:#8a765a;padding:28px;letter-spacing:1px}
 }
 .buffer-edit-field input{max-width:180px;}
 .buffer-edit-field button{width:auto;margin-top:8px;}
+
+
+/* 美甲預約申請與待確認中心 */
+.pending-center{display:grid;gap:12px}
+.pending-card{
+  position:relative;
+  padding:14px 14px 14px 18px;
+  border:1px solid rgba(185,144,60,.28);
+  border-radius:18px;
+  background:linear-gradient(135deg,#fffdf8,#f7edd7);
+  cursor:pointer;
+}
+.pending-card:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(73,49,23,.12)}
+#nailRequestCard{border-color:rgba(40,120,215,.35)}

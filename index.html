@@ -58,7 +58,50 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card hidden" id="nailRequestCard">
+      <h2>6. 美甲預約申請</h2>
+      <p class="hint">美甲服務採人工確認制，請先填寫希望時間與需求，店家將再與您確認正式預約時間。</p>
+      <div class="form-grid">
+        <div class="field">
+          <label for="nailPreferredPeriod">希望時段</label>
+          <select id="nailPreferredPeriod">
+            <option>上午</option>
+            <option>下午</option>
+            <option>晚上</option>
+            <option>指定時間</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="nailPreferredTime">指定時間／可接受時間</label>
+          <input id="nailPreferredTime" placeholder="例如：14:00左右、下午都可以">
+        </div>
+        <div class="field">
+          <label for="nailPart">手部或足部</label>
+          <select id="nailPart">
+            <option>手部</option>
+            <option>足部</option>
+            <option>手足皆要</option>
+            <option>不確定</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="nailStyle">項目樣式</label>
+          <select id="nailStyle">
+            <option>單色</option>
+            <option>造型</option>
+            <option>單純卸甲</option>
+            <option>保養</option>
+            <option>不確定</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="nailNote">美甲備註</label>
+        <textarea id="nailNote" rows="3" placeholder="例如：有卸甲、想做法式、想貼鑽、甲面狀況等"></textarea>
+      </div>
+    </section>
+
+    <section class="card" id="slotCard">
       <h2>6. 選擇可預約時段</h2>
       <div id="slotList" class="slot-list muted">請先加入療程並選擇日期</div>
     </section>

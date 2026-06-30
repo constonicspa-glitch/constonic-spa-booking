@@ -149,6 +149,28 @@ function totals(){
   return{serviceMinutes,internalBuffer,totalBlock:serviceMinutes+internalBuffer};
 }
 
+
+function hasNailService(){
+  return cart.some(i => i.category === "美甲設計");
+}
+function toggleNailRequestUI(){
+  const isNail = hasNailService();
+  const nailCard = $("nailRequestCard");
+  const slotCard = $("slotCard");
+  if(nailCard) nailCard.classList.toggle("hidden", !isNail);
+  if(slotCard) slotCard.classList.toggle("hidden", isNail);
+}
+function nailRequestSummary(){
+  if(!hasNailService()) return null;
+  return {
+    preferred_period: $("nailPreferredPeriod") ? $("nailPreferredPeriod").value : "",
+    preferred_time: $("nailPreferredTime") ? $("nailPreferredTime").value : "",
+    part: $("nailPart") ? $("nailPart").value : "",
+    style: $("nailStyle") ? $("nailStyle").value : "",
+    nail_note: $("nailNote") ? $("nailNote").value : ""
+  };
+}
+
 function renderCategories(){
   const box=$("categoryButtons");
   box.innerHTML="";
@@ -180,6 +202,7 @@ function addToCart(item){
   selectedSlot="";
   renderCart();
   renderTeacherFee();
+  toggleNailRequestUI();
   loadBookingsAndSlots();
   updateSummary();
 }
@@ -189,6 +212,7 @@ function removeFromCart(id){
   selectedSlot="";
   renderCart();
   renderTeacherFee();
+  toggleNailRequestUI();
   loadBookingsAndSlots();
   updateSummary();
 }
@@ -198,6 +222,7 @@ function clearCart(){
   selectedSlot="";
   renderCart();
   renderTeacherFee();
+  toggleNailRequestUI();
   renderSlots();
   updateSummary();
 }
@@ -209,6 +234,7 @@ function changeItemTherapist(cartId, therapist){
     selectedSlot="";
     renderCart();
     renderTeacherFee();
+  toggleNailRequestUI();
     loadBookingsAndSlots();
     updateSummary();
   }
@@ -287,6 +313,14 @@ function isTherapistBusy(therapist,start,end){
 }
 
 function renderSlots(){
+  if(hasNailService()){
+    const slotList=$("slotList");
+    if(slotList){
+      slotList.textContent="美甲採人工確認制，請填寫希望時段後送出申請。";
+      slotList.className="slot-list muted";
+    }
+    return;
+  }
   const date=$("date").value,slotList=$("slotList");
   slotList.innerHTML="";
   if(!cart.length||!date){
@@ -344,7 +378,7 @@ function renderSlots(){
 
 function updateSummary(){
   const s=$("summary");
-  if(!cart.length||!$("date").value||!selectedSlot){
+  if(!cart.length||!$("date").value||(!selectedSlot && !hasNailService())){
     s.textContent="尚未選擇完整預約內容";
     s.className="summary muted";
     return;
@@ -353,15 +387,15 @@ function updateSummary(){
   const plan=plannedSchedule(start);
   const fee=cart.some(i=>i.category==="身體舒壓"&&i.teacherFee&&i.therapist==="雅潔老師")?"｜含雅潔老師身體指定費 +300 元":"";
   s.className="summary";
-  s.innerHTML=`<strong>預約確認</strong><br>項目：<br>${plan.map((p,idx)=>`${idx+1}. ${p.item.category}｜${p.item.name}（${p.item.duration} 分鐘）｜${p.therapist}｜${minutesToTime(p.start)}-${minutesToTime(p.serviceEnd)}`).join("<br>")}<br><br>療程時間合計：${cart.reduce((sum,i)=>sum+i.duration,0)} 分鐘${fee}<br>日期：${$("date").value}<br>開始時間：${selectedSlot}`;
+  s.innerHTML=`<strong>預約確認</strong><br>項目：<br>${plan.map((p,idx)=>`${idx+1}. ${p.item.category}｜${p.item.name}（${p.item.duration} 分鐘）｜${p.therapist}｜${minutesToTime(p.start)}-${minutesToTime(p.serviceEnd)}`).join("<br>")}<br><br>療程時間合計：${cart.reduce((sum,i)=>sum+i.duration,0)} 分鐘${fee}<br>日期：${$("date").value}<br>開始時間：${hasNailService() ? "待店家確認" : selectedSlot}`;
 }
 
 $("date").addEventListener("change",()=>{selectedSlot="";loadBookingsAndSlots();updateSummary()});
 
 $("bookingForm").addEventListener("submit",async e=>{
   e.preventDefault();
-  if(!cart.length||!$("date").value||!selectedSlot){
-    alert("請先加入療程、選擇日期與可預約時段。");
+  if(!cart.length||!$("date").value||(!selectedSlot && !hasNailService())){
+    alert(hasNailService() ? "請先加入美甲項目並選擇希望日期。" : "請先加入療程、選擇日期與可預約時段。");
     return;
   }
   if(!dbReady){
@@ -386,8 +420,8 @@ $("bookingForm").addEventListener("submit",async e=>{
     phone:$("phone").value,
     line_name:$("lineName").value,
     first_visit:$("firstVisit").value,
-    note:$("note").value,
-    status:"pending"
+    note:$("note").value, nail_request:nailRequestSummary(),
+    status: hasNailService() ? "nail_request" : "pending"
   }));
 
   const {error}=await db.from("bookings").insert(payloads);
@@ -398,7 +432,7 @@ $("bookingForm").addEventListener("submit",async e=>{
     return;
   }
   $("formMessage").textContent="";
-  $("successDetail").innerHTML=`<div class="summary">姓名：${$("name").value}<br>項目：<br>${plan.map((p,idx)=>`${idx+1}. ${p.item.name}（${p.item.duration}分）｜${p.therapist}｜${minutesToTime(p.start)}-${minutesToTime(p.serviceEnd)}`).join("<br>")}<br>日期：${$("date").value}<br>時間：${selectedSlot}</div>`;
+  $("successDetail").innerHTML=`<div class="summary">姓名：${$("name").value}<br>項目：<br>${plan.map((p,idx)=>`${idx+1}. ${p.item.name}（${p.item.duration}分）｜${p.therapist}｜${minutesToTime(p.start)}-${minutesToTime(p.serviceEnd)}`).join("<br>")}<br>日期：${$("date").value}<br>時間：${hasNailService() ? "待店家確認" : selectedSlot}</div>`;
   $("successModal").classList.remove("hidden");
 });
 
@@ -408,6 +442,7 @@ function closeModal(){
 }
 
 renderCategories();
+toggleNailRequestUI();
 renderCart();
 const today=new Date();
 $("date").min=today.toISOString().slice(0,10);
