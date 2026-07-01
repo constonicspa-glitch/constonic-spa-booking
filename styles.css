@@ -110,3 +110,49 @@ button:disabled{
   border-color:var(--gold) !important;
   box-shadow:0 10px 20px rgba(32,61,50,.18);
 }
+
+
+/* CONSTONIC V4.6 */
+.c46-slot-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
+  gap:16px;
+}
+.c46-slot{
+  min-height:64px !important;
+  font-size:22px !important;
+  font-weight:900 !important;
+  border-radius:20px !important;
+}
+.c46-slot.selected{
+  background:var(--green) !important;
+  color:#fff !important;
+  border-color:var(--gold) !important;
+  box-shadow:0 12px 24px rgba(32,61,50,.22);
+}
+.c46-custom-fields{
+  margin-top:22px;
+}
+.c46-custom-fields textarea{
+  width:100%;
+  min-height:96px;
+  font-size:18px;
+  border:1px solid rgba(185,144,60,.35);
+  border-radius:18px;
+  padding:14px 16px;
+  background:#fffdf8;
+  color:var(--brown);
+}
+.c46-nail-notice{
+  margin-bottom:18px;
+}
+@media(max-width:640px){
+  .c46-slot-grid{
+    grid-template-columns:repeat(2,1fr);
+    gap:12px;
+  }
+  .c46-slot{
+    min-height:58px !important;
+    font-size:18px !important;
+  }
+}

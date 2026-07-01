@@ -1002,3 +1002,232 @@ document.addEventListener("click", function(e){
 
 document.addEventListener("change", () => setTimeout(() => { if(typeof renderSlots === "function") renderSlots(); }, 150));
 document.addEventListener("click", () => setTimeout(() => { if(typeof renderSlots === "function") renderSlots(); }, 180));
+
+
+/* CONSTONIC FRONT V4.6
+   修正：
+   1. 美甲＋臉部／身體同時預約仍顯示可預約時間
+   2. 時間按鈕放大
+   3. 新增自由填寫需求欄位
+*/
+window.CONSTONIC_FRONT_VERSION = "V4.6";
+
+function c46Cart(){
+  try{
+    if(Array.isArray(window.cart)) return window.cart;
+    if(typeof cart !== "undefined" && Array.isArray(cart)) return cart;
+  }catch(e){}
+  return [];
+}
+
+function c46IsNailItem(item){
+  const text = [item?.name,item?.category,item?.therapist,item?.type].map(v => String(v || "")).join(" ");
+  return /美甲|指甲|卸甲|手部|足部|單色|造型|曼曼/.test(text);
+}
+
+function c46HasNail(){ return c46Cart().some(c46IsNailItem); }
+function c46SpaItems(){ return c46Cart().filter(i => !c46IsNailItem(i)); }
+function c46HasSpa(){ return c46SpaItems().length > 0; }
+
+function c46TimeToMin(t){
+  const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function c46NormalizeStaff(name){
+  if(["雅潔老師","巧萱美容師","曼曼美甲師"].includes(name)) return name;
+  return "不指定";
+}
+
+function c46BookingSegments(bookings){
+  const segs = [];
+  (bookings || []).forEach(b => {
+    if(b.status === "cancelled") return;
+    const base = c46TimeToMin(b.slot);
+    if(base === null) return;
+    let offset = 0;
+    (b.items || []).forEach(item => {
+      const duration = Number(item.duration || 0);
+      if(duration <= 0) return;
+      // 美甲採諮詢制，不鎖 SPA 時段
+      if(c46IsNailItem(item)){
+        offset += duration;
+        return;
+      }
+      segs.push({
+        therapist:c46NormalizeStaff(item.therapist || b.therapist),
+        start:base + offset,
+        end:base + offset + duration
+      });
+      offset += duration;
+    });
+  });
+  return segs;
+}
+
+function c46NeedSegments(startMin){
+  const items = c46SpaItems();
+  const segs = [];
+  let offset = 0;
+  items.forEach(item => {
+    const duration = Number(item.duration || 0);
+    if(duration <= 0) return;
+    let fallback = "不指定";
+    try{ fallback = selectedTherapist || "不指定"; }catch(e){}
+    segs.push({
+      therapist:c46NormalizeStaff(item.therapist || fallback),
+      start:startMin + offset,
+      end:startMin + offset + duration
+    });
+    offset += duration;
+  });
+  return segs;
+}
+
+function c46Overlap(aStart, aEnd, bStart, bEnd){ return aStart < bEnd && aEnd > bStart; }
+
+function c46Available(bookings, time){
+  const start = c46TimeToMin(time);
+  if(start === null) return false;
+
+  const need = c46NeedSegments(start);
+
+  // 只選美甲，不顯示固定時間；混合預約則只算 SPA items
+  if(!need.length) return false;
+
+  const busy = c46BookingSegments(bookings);
+  return need.every(n => {
+    if(n.therapist === "不指定") return !busy.some(b => c46Overlap(n.start, n.end, b.start, b.end));
+    return !busy.some(b => b.therapist === n.therapist && c46Overlap(n.start, n.end, b.start, b.end));
+  });
+}
+
+function c46NailNotice(mixed){
+  return `<div class="nail-consult-box c46-nail-notice">
+    <strong>美甲採諮詢預約制</strong>
+    <p>${mixed ? "您同時選擇美甲與 SPA／臉部／身體服務。下方時間只代表 SPA／臉部／身體可預約時間；美甲正式時間會由店家再與您確認。" : "美甲時間會依手部／足部、卸甲、單色或造型而不同，請填寫需求後由店家確認正式時間。"}</p>
+  </div>`;
+}
+
+function c46EnsureCustomFields(){
+  if(document.getElementById("c46CustomFields")) return;
+  const cartCard = document.getElementById("cartCard") || document.querySelector(".cart-card") || document.querySelector("#bookingList")?.parentElement || document.querySelector("section.card");
+  if(!cartCard) return;
+
+  const box = document.createElement("div");
+  box.id = "c46CustomFields";
+  box.className = "card c46-custom-fields";
+  box.innerHTML = `
+    <h2>其他需求補充</h2>
+    <div class="form-grid">
+      <div class="field">
+        <label>美甲其他需求</label>
+        <textarea id="customNailRequest" rows="3" placeholder="例如：想做法式、貓眼、暈染、卸甲重做、特殊造型..."></textarea>
+      </div>
+      <div class="field">
+        <label>臉部／身體其他療程需求</label>
+        <textarea id="customSpaRequest" rows="3" placeholder="例如：想加強肩頸、臉部保濕、腿部水腫、指定未列出的療程..."></textarea>
+      </div>
+    </div>
+  `;
+  cartCard.insertAdjacentElement("afterend", box);
+}
+
+async function c46RenderSlots(){
+  const box = document.getElementById("slotList") || document.getElementById("slots") || document.querySelector(".slot-list");
+  const dateInput = document.getElementById("date") || document.getElementById("bookingDate");
+  if(!box || !dateInput) return false;
+
+  c46EnsureCustomFields();
+
+  const hasNail = c46HasNail();
+  const hasSpa = c46HasSpa();
+
+  if(hasNail && !hasSpa){
+    box.innerHTML = c46NailNotice(false);
+    return true;
+  }
+
+  const date = dateInput.value;
+  if(!date) return false;
+
+  const {data, error} = await db.from("bookings").select("*").eq("date", date);
+  if(error){
+    console.error(error);
+    box.innerHTML = "<p>讀取時段失敗，請稍後再試。</p>";
+    return true;
+  }
+
+  const times = ["10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"];
+  const slots = times.map(t => {
+    const ok = c46Available(data || [], t);
+    return `<button type="button" class="slot-btn c46-slot ${ok ? "" : "disabled"}" data-time="${t}" ${ok ? "" : "disabled"}>${t}${ok ? "" : " 已滿"}</button>`;
+  }).join("");
+
+  box.innerHTML = (hasNail ? c46NailNotice(true) : "") + `<div class="slot-grid c46-slot-grid">${slots}</div>`;
+  return true;
+}
+
+window.renderSlots = c46RenderSlots;
+
+function c46SelectSlot(time, btn){
+  window.selectedSlot = time;
+  try{ selectedSlot = time; }catch(e){}
+  document.querySelectorAll(".slot-btn,.slot-button").forEach(b => b.classList.remove("selected"));
+  if(btn) btn.classList.add("selected");
+
+  const hidden = document.getElementById("selectedSlot") || document.querySelector('input[name="slot"]');
+  if(hidden) hidden.value = time;
+
+  const contactCard = document.getElementById("contactCard") || document.getElementById("customerCard") || document.getElementById("bookingForm") || document.querySelector(".contact-card");
+  if(contactCard){
+    contactCard.classList.remove("hidden");
+    contactCard.scrollIntoView({behavior:"smooth", block:"start"});
+  }
+}
+
+window.selectSlot = function(time){ c46SelectSlot(time); };
+
+document.addEventListener("click", function(e){
+  const btn = e.target.closest(".slot-btn,.slot-button");
+  if(!btn) return;
+  if(btn.disabled || btn.classList.contains("disabled")) return;
+  const time = btn.dataset.time || (btn.textContent.match(/\d{1,2}:\d{2}/)||[])[0];
+  if(!time) return;
+  e.preventDefault();
+  c46SelectSlot(time, btn);
+}, true);
+
+/* 送出前把自由填寫內容併入備註 */
+function c46AppendCustomNote(){
+  const nail = document.getElementById("customNailRequest")?.value?.trim();
+  const spa = document.getElementById("customSpaRequest")?.value?.trim();
+  if(!nail && !spa) return;
+
+  const noteField = document.getElementById("note") || document.getElementById("bookingNote") || document.querySelector('textarea[name="note"]');
+  if(!noteField) return;
+
+  const extra = [
+    nail ? "美甲其他需求：" + nail : "",
+    spa ? "臉部／身體其他需求：" + spa : ""
+  ].filter(Boolean).join("\\n");
+
+  if(noteField.value && !noteField.value.includes(extra)){
+    noteField.value += "\\n" + extra;
+  }else if(!noteField.value){
+    noteField.value = extra;
+  }
+}
+
+document.addEventListener("submit", c46AppendCustomNote, true);
+document.addEventListener("click", e => {
+  if(e.target.closest("button")){
+    const text = e.target.closest("button").textContent || "";
+    if(/送出|預約|確認/.test(text)) c46AppendCustomNote();
+  }
+}, true);
+
+document.addEventListener("change", () => setTimeout(() => { if(typeof renderSlots === "function") renderSlots(); }, 150));
+document.addEventListener("click", () => setTimeout(() => { if(typeof renderSlots === "function") renderSlots(); }, 180));
+document.addEventListener("DOMContentLoaded", () => setTimeout(c46EnsureCustomFields, 500));
