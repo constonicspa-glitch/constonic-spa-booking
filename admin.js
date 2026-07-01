@@ -992,3 +992,20 @@ window.CONSTONIC_ADMIN_VERSION = 'V4.7';
 
 /* CONSTONIC ADMIN V4.8 */
 window.CONSTONIC_ADMIN_VERSION = 'V4.8';
+
+
+/* CONSTONIC ADMIN V4.9 - 移除美甲 + 人員管理 + 手機行事曆 */
+window.CONSTONIC_ADMIN_VERSION="V4.9";
+const C49_ADMIN_DEFAULT_STAFF=[{name:"雅潔老師",active:true,type:"SPA",color:"pink"},{name:"巧萱美容師",active:true,type:"SPA",color:"purple"}];
+function c49AdminLoadStaff(){try{const s=JSON.parse(localStorage.getItem("constonic_staff_members")||"[]");return (Array.isArray(s)&&s.length?s:C49_ADMIN_DEFAULT_STAFF).filter(x=>x&&x.type!=="美甲"&&!/美甲|曼曼/.test(String(x.name||"")));}catch(e){return C49_ADMIN_DEFAULT_STAFF;}}
+function c49AdminSaveStaff(list){localStorage.setItem("constonic_staff_members",JSON.stringify((list||[]).filter(s=>s&&s.name&&s.type!=="美甲"&&!/美甲|曼曼/.test(String(s.name)))));}
+function c49AdminActiveStaff(){return c49AdminLoadStaff().filter(s=>s.active!==false);}
+function c49InjectStaffPanel(){if(document.getElementById("c49StaffPanel"))return;const main=document.getElementById("adminMain")||document.querySelector("main")||document.body;const card=document.createElement("section");card.id="c49StaffPanel";card.className="card";card.innerHTML='<h2>人員管理</h2><p class="hint">新增或停用人員後，前台與後台會同步讀取。美甲暫不放入預約系統。</p><div class="form-grid"><div class="field"><label>新增人員名稱</label><input id="c49StaffName" placeholder="例如：小安美容師"></div><div class="field"><label>類型</label><select id="c49StaffType"><option value="SPA">SPA／臉部／身體</option><option value="其他">其他</option></select></div></div><button type="button" class="primary" onclick="c49AddStaff()">＋新增人員</button><div id="c49StaffList" class="c49-staff-list"></div>';main.appendChild(card);c49RenderStaffList();}
+function c49RenderStaffList(){const box=document.getElementById("c49StaffList");if(!box)return;const list=c49AdminLoadStaff();box.innerHTML=list.map((s,idx)=>`<div class="c49-staff-row"><div><strong>${escapeHtml(s.name)}</strong><span>${escapeHtml(s.type||"SPA")}｜${s.active===false?"已停用":"啟用中"}</span></div><div><button type="button" onclick="c49ToggleStaff(${idx})">${s.active===false?"啟用":"停用"}</button><button type="button" class="danger-soft" onclick="c49DeleteStaff(${idx})">刪除</button></div></div>`).join("");}
+window.c49AddStaff=function(){const name=document.getElementById("c49StaffName")?.value?.trim();const type=document.getElementById("c49StaffType")?.value||"SPA";if(!name){alert("請輸入人員名稱");return;}if(/美甲|曼曼/.test(name)){alert("美甲暫不放入預約系統，請使用私訊詢問。");return;}const list=c49AdminLoadStaff();if(list.some(s=>s.name===name)){alert("此人員已存在");return;}list.push({name,type,active:true,color:"green"});c49AdminSaveStaff(list);document.getElementById("c49StaffName").value="";c49RenderStaffList();alert("人員已新增，前台重新整理後會同步。");};
+window.c49ToggleStaff=function(idx){const list=c49AdminLoadStaff();if(!list[idx])return;list[idx].active=list[idx].active===false?true:false;c49AdminSaveStaff(list);c49RenderStaffList();};
+window.c49DeleteStaff=function(idx){const list=c49AdminLoadStaff();if(!list[idx])return;if(!confirm("確定刪除這位人員？"))return;list.splice(idx,1);c49AdminSaveStaff(list);c49RenderStaffList();};
+function c49RemoveNailFromAdmin(){document.querySelectorAll(".calendar-head, option, button, label").forEach(el=>{if(/曼曼|美甲/.test(el.textContent||el.value||""))el.remove();});}
+window.v41StaffList=function(bookings,filter){const active=c49AdminActiveStaff().map(s=>s.name);if(filter&&filter!=="全部"&&active.includes(filter))return[filter];return active;};
+document.addEventListener("DOMContentLoaded",()=>{setTimeout(c49InjectStaffPanel,900);setTimeout(c49RemoveNailFromAdmin,1000);});
+document.addEventListener("click",()=>setTimeout(c49RemoveNailFromAdmin,200));

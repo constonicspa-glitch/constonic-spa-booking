@@ -181,3 +181,13 @@ button:disabled{
   .c48-slot-grid{grid-template-columns:repeat(2,1fr);gap:12px;}
   .c48-slot{min-height:60px !important;font-size:18px !important;}
 }
+
+
+/* CONSTONIC V4.9 */
+.c49-slot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:16px;}
+.c49-slot{min-height:66px !important;font-size:22px !important;font-weight:900 !important;border-radius:20px !important;}
+.c49-slot.selected,.c49-slot.is-selected,.slot-btn.selected,.slot-btn.is-selected{background:#143c32 !important;color:#fff !important;border:3px solid #b8903c !important;box-shadow:0 12px 26px rgba(20,60,50,.32) !important;}
+.c49-staff-list{display:grid;gap:10px;margin-top:14px;}
+.c49-staff-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid rgba(185,144,60,.25);border-radius:16px;background:#fffdf8;}
+.c49-staff-row span{display:block;color:var(--brown);font-size:14px;margin-top:4px;}
+@media(max-width:760px){.calendar-grid{min-width:760px !important;}#calendarView{overflow-x:auto !important;-webkit-overflow-scrolling:touch;}.calendar-cell{min-width:210px !important;}.booking-card{max-width:190px;}.c49-slot-grid{grid-template-columns:repeat(2,1fr);gap:12px;}.c49-slot{min-height:58px !important;font-size:18px !important;}.c49-staff-row{align-items:flex-start;flex-direction:column;}}
