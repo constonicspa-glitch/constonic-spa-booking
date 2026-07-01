@@ -1921,3 +1921,96 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 document.addEventListener("click", () => setTimeout(() => { c60EnsureLineHidden(); c60EnsureBirthdayMonth(); }, 150));
 document.addEventListener("change", () => setTimeout(c60SetDateLimit, 120));
+
+
+/* CONSTONIC FRONT V6.0 RC2
+   緊急穩定修正：
+   - 避免前台因 dbReady / services 未定義而空白
+   - 療程資料讀取失敗時保留原本頁面，不中斷
+   - LINE 欄位改隱藏，不破壞送出流程
+*/
+window.CONSTONIC_FRONT_VERSION = "V6.0 RC2";
+
+window.addEventListener("error", function(e){
+  console.warn("前台錯誤已攔截，不讓頁面空白：", e.message);
+});
+
+async function c62SafeLoadServices(){
+  try{
+    if(typeof db === "undefined" || !db || !db.from) return false;
+    const [catRes,itemRes] = await Promise.all([
+      db.from("service_categories").select("*").eq("active",true).order("sort_order",{ascending:true}),
+      db.from("service_items").select("*").eq("active",true).order("sort_order",{ascending:true})
+    ]);
+    if(catRes.error || itemRes.error) return false;
+    window.c60ServiceCategories = (catRes.data || []).filter(c => !/美甲|曼曼/.test(String(c.name||"")));
+    window.c60ServiceItems = (itemRes.data || []).filter(i => !/美甲|曼曼/.test(String(i.name+i.category_name)));
+    return window.c60ServiceCategories.length > 0;
+  }catch(err){
+    console.warn("療程資料讀取失敗，使用原本內建療程", err);
+    return false;
+  }
+}
+
+function c62SafeRenderCategories(){
+  try{
+    const box = document.getElementById("categoryButtons");
+    if(!box) return;
+    if(window.c60ServiceCategories && window.c60ServiceCategories.length){
+      box.innerHTML = "";
+      window.c60ServiceCategories.forEach(c => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = c.name;
+        btn.onclick = () => {
+          if(typeof selectCategory === "function") selectCategory(c.name);
+        };
+        box.appendChild(btn);
+      });
+    }else if(typeof renderCategories === "function"){
+      renderCategories();
+    }
+  }catch(err){
+    console.warn("類別渲染失敗", err);
+  }
+}
+
+function c62EnsureLineHidden(){
+  let line = document.getElementById("lineName");
+  if(!line){
+    line = document.createElement("input");
+    line.type = "hidden";
+    line.id = "lineName";
+    line.value = "";
+    document.body.appendChild(line);
+  }
+  const field = line.closest(".field");
+  if(field) field.style.display = "none";
+}
+
+function c62EnsureBirthday(){
+  if(document.getElementById("birthdayMonth")) return;
+  const phone = document.querySelector("#phone,input[name='phone'],input[type='tel']");
+  const anchor = phone?.closest(".field") || phone?.parentElement;
+  if(!anchor) return;
+  const field = document.createElement("div");
+  field.className = "field";
+  field.innerHTML = `<label>生日月份</label><select id="birthdayMonth" name="birthday_month"><option value="">可不填</option>${Array.from({length:12},(_,i)=>`<option value="${i+1}月">${i+1}月</option>`).join("")}</select>`;
+  anchor.insertAdjacentElement("afterend", field);
+}
+
+async function c62InitFront(){
+  c62EnsureLineHidden();
+  c62EnsureBirthday();
+  await c62SafeLoadServices();
+  c62SafeRenderCategories();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(c62InitFront, 500);
+  setTimeout(c62InitFront, 1500);
+});
+document.addEventListener("click", () => setTimeout(() => {
+  c62EnsureLineHidden();
+  c62EnsureBirthday();
+}, 150));

@@ -1715,3 +1715,84 @@ document.addEventListener("DOMContentLoaded", () => {
   setTimeout(c60InjectServicePanel, 1200);
   setTimeout(c60InjectBookingSettings, 1400);
 });
+
+
+/* CONSTONIC ADMIN V6.0 RC2
+   後台穩定修正：
+   - 移除舊版重複人員管理，只保留 Supabase 新版
+   - 店休／個人休假收合並移到頁面下方
+*/
+window.CONSTONIC_ADMIN_VERSION = "V6.0 RC2";
+
+function c62RemoveDuplicateStaffPanels(){
+  const panels = Array.from(document.querySelectorAll("section.card, .card")).filter(card => {
+    const h = card.querySelector("h2,h3")?.textContent || "";
+    return /人員管理/.test(h);
+  });
+
+  if(panels.length <= 1) return;
+
+  panels.forEach(card => {
+    if(card.id !== "c51StaffPanel"){
+      card.remove();
+    }
+  });
+}
+
+function c62MakeVacationCollapsed(){
+  const cards = Array.from(document.querySelectorAll("section.card, .card"));
+  cards.forEach(card => {
+    const title = card.querySelector("h2,h3")?.textContent || "";
+    const isVacation = /店休|休假|個人休假|關閉預約/.test(title);
+    if(!isVacation || card.classList.contains("c62-vacation-collapsed")) return;
+
+    card.classList.add("c62-vacation-collapsed");
+
+    const inner = document.createElement("details");
+    inner.className = "c62-details";
+    inner.open = false;
+
+    const summary = document.createElement("summary");
+    summary.innerHTML = `<strong>${title}</strong><span>點開修改</span>`;
+    inner.appendChild(summary);
+
+    const children = Array.from(card.childNodes);
+    children.forEach(node => {
+      if(node.nodeType === 1 && node.matches("h2,h3")) return;
+      inner.appendChild(node);
+    });
+
+    card.innerHTML = "";
+    card.appendChild(inner);
+
+    const main = document.getElementById("adminMain") || document.querySelector("main");
+    if(main) main.appendChild(card);
+  });
+}
+
+function c62MoveManagementPanelsDown(){
+  const main = document.getElementById("adminMain") || document.querySelector("main");
+  if(!main) return;
+
+  ["c60BookingSettings","c51StaffPanel","c60ServicePanel"].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) main.appendChild(el);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    c62RemoveDuplicateStaffPanels();
+    c62MakeVacationCollapsed();
+    c62MoveManagementPanelsDown();
+  }, 1200);
+  setTimeout(() => {
+    c62RemoveDuplicateStaffPanels();
+    c62MakeVacationCollapsed();
+    c62MoveManagementPanelsDown();
+  }, 2500);
+});
+document.addEventListener("click", () => setTimeout(() => {
+  c62RemoveDuplicateStaffPanels();
+  c62MakeVacationCollapsed();
+}, 200));

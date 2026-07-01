@@ -400,3 +400,42 @@ button,.primary{
     align-items:flex-start;
   }
 }
+
+
+/* CONSTONIC V6.0 RC2 */
+.c62-vacation-collapsed{
+  margin-top:24px !important;
+}
+.c62-details{
+  border:1px solid rgba(184,144,60,.28);
+  border-radius:18px;
+  background:#fffdf8;
+  overflow:hidden;
+}
+.c62-details summary{
+  list-style:none;
+  cursor:pointer;
+  padding:16px 18px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  color:#143c32;
+  background:#fff7e6;
+}
+.c62-details summary::-webkit-details-marker{
+  display:none;
+}
+.c62-details summary strong{
+  font-size:20px;
+}
+.c62-details summary span{
+  color:#b8903c;
+  font-weight:800;
+}
+.c62-details[open]{
+  padding-bottom:16px;
+}
+.c62-details[open] > *:not(summary){
+  margin-left:16px;
+  margin-right:16px;
+}
