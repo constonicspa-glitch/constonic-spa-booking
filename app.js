@@ -1671,311 +1671,30 @@ document.addEventListener("click", async () => {
 });
 
 
-/* CONSTONIC FRONT V6.0 Beta
-   穩定前台：移除 LINE、生日月份、2個月限制、簡潔品牌感
+/* CONSTONIC FRONT V6.0 RC3
+   前台安全修復：
+   - 用穩定版前台為基礎
+   - 移除 LINE 顯示但保留隱藏欄位避免舊程式錯誤
+   - 移除其他需求補充
+   - 移除美甲
+   - 加生日月份
+   - 日期限制兩個月
 */
-window.CONSTONIC_FRONT_VERSION = "V6.0 Beta";
-
-function c60RemoveLineField(){
-  document.querySelectorAll("input,textarea").forEach(el=>{
-    const label=el.closest(".field")?.querySelector("label")?.textContent||"";
-    const ph=el.getAttribute("placeholder")||"";
-    const name=el.getAttribute("name")||"";
-    const id=el.id||"";
-    if(/LINE|Line|line/.test(label+ph+name+id)){
-      (el.closest(".field")||el.parentElement)?.remove();
-    }
-  });
-}
-function c60EnsureBirthdayMonth(){
-  if(document.getElementById("birthdayMonth")) return;
-  const phone=document.querySelector("#phone,input[name='phone'],input[type='tel']");
-  const anchor=phone?.closest(".field")||phone?.parentElement;
-  if(!anchor) return;
-  const field=document.createElement("div");
-  field.className="field";
-  field.innerHTML=`<label>生日月份</label><select id="birthdayMonth" name="birthday_month"><option value="">可不填</option>${Array.from({length:12},(_,i)=>`<option value="${i+1}月">${i+1}月</option>`).join("")}</select>`;
-  anchor.insertAdjacentElement("afterend",field);
-}
-function c60SetDateLimit(){
-  const input=document.getElementById("date")||document.getElementById("bookingDate");
-  if(!input)return;
-  const today=new Date(), max=new Date();
-  max.setMonth(max.getMonth()+2);
-  const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  input.min=iso(today); input.max=iso(max);
-  if(!input.value||input.value<input.min)input.value=input.min;
-  if(input.value>input.max)input.value=input.max;
-}
-function c60BrandHeader(){
-  if(document.querySelector(".c60-brand-note"))return;
-  const hero=document.querySelector("header,.hero,.brand-header");
-  if(!hero)return;
-  const note=document.createElement("div");
-  note.className="c60-brand-note";
-  note.innerHTML=`<strong>康姿多儷 Spa</strong><span>CONSTONIC Beauty Center</span>`;
-  hero.prepend(note);
-}
-function c60PatchSubmitBirthday(){
-  const oldSubmit=window.submitBooking;
-  if(typeof oldSubmit==="function"&&!oldSubmit.c60Patched){
-    const patched=async function(){
-      const birthday=document.getElementById("birthdayMonth")?.value||"";
-      const result=await oldSubmit.apply(this,arguments);
-      try{
-        if(birthday&&window.lastBookingId){
-          await db.from("bookings").update({birthday_month:birthday}).eq("id",window.lastBookingId);
-        }
-      }catch(e){console.warn("生日月份補寫失敗，不影響預約",e);}
-      return result;
-    };
-    patched.c60Patched=true;
-    window.submitBooking=patched;
-  }
-}
-document.addEventListener("DOMContentLoaded",()=>{
-  c60RemoveLineField(); c60EnsureBirthdayMonth(); c60SetDateLimit(); c60BrandHeader(); c60PatchSubmitBirthday();
-  setTimeout(c60RemoveLineField,600); setTimeout(c60EnsureBirthdayMonth,700);
-});
-document.addEventListener("click",()=>setTimeout(()=>{c60RemoveLineField(); c60EnsureBirthdayMonth(); c60PatchSubmitBirthday();},150));
-document.addEventListener("change",()=>setTimeout(c60SetDateLimit,100));
-
-
-/* CONSTONIC FRONT V6.0 RC1
-   前台正式連動：
-   - 療程類別／療程項目改讀 Supabase
-   - 後台新增、修改、停用後，前台同步
-   - 移除 LINE 欄位但保留隱藏 input，避免舊送出邏輯錯誤
-   - 生日月份欄位
-   - 預約區間讀後台設定
-*/
-window.CONSTONIC_FRONT_VERSION = "V6.0 RC1";
-
-window.c60ServiceCategories = [];
-window.c60ServiceItems = [];
-window.c60StaffMembers = [];
-
-function c60Money(n){ return Number(n || 0).toLocaleString("zh-TW"); }
-
-async function c60LoadFrontStaff(){
-  try{
-    const {data,error} = await db.from("staff_members").select("*").eq("active", true).order("sort_order",{ascending:true});
-    if(error) throw error;
-    window.c60StaffMembers = (data || []).filter(s => s.type !== "美甲" && !/美甲|曼曼/.test(String(s.name||"")));
-  }catch(e){
-    window.c60StaffMembers = [{name:"雅潔老師"},{name:"巧萱美容師"}];
-  }
-  return window.c60StaffMembers;
-}
-
-async function c60LoadFrontServices(){
-  if(!dbReady) return false;
-  try{
-    const [catRes,itemRes] = await Promise.all([
-      db.from("service_categories").select("*").eq("active",true).order("sort_order",{ascending:true}),
-      db.from("service_items").select("*").eq("active",true).order("sort_order",{ascending:true})
-    ]);
-    if(catRes.error || itemRes.error) throw (catRes.error || itemRes.error);
-    window.c60ServiceCategories = (catRes.data || []).filter(c => !/美甲|曼曼/.test(String(c.name||"")));
-    window.c60ServiceItems = (itemRes.data || []).filter(i => !/美甲|曼曼/.test(String(i.name+i.category_name)));
-    return window.c60ServiceCategories.length > 0;
-  }catch(e){
-    console.warn("讀取療程管理失敗，使用原本內建療程", e);
-    return false;
-  }
-}
-
-window.renderCategories = function(){
-  const box = $("categoryButtons");
-  if(!box) return;
-  box.innerHTML = "";
-  const cats = window.c60ServiceCategories.length ? window.c60ServiceCategories.map(c => c.name) : Object.keys(services).filter(c => !/美甲|曼曼/.test(c));
-  cats.forEach(cat => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = cat;
-    btn.onclick = () => selectCategory(cat);
-    box.appendChild(btn);
-  });
-};
-
-window.selectCategory = function(cat){
-  const categoryButtons = $("categoryButtons");
-  if(categoryButtons){
-    [...categoryButtons.children].forEach(b => b.classList.toggle("active", b.textContent === cat));
-  }
-  const box = $("serviceList");
-  if(!box) return;
-  box.innerHTML = "";
-  box.className = "service-list";
-
-  let list = [];
-  if(window.c60ServiceItems.length){
-    list = window.c60ServiceItems.filter(i => i.category_name === cat);
-  }else{
-    list = (services[cat] || []).filter(i => !/美甲|曼曼/.test(String(i.name||"")));
-  }
-
-  if(!list.length){
-    box.className = "service-list muted";
-    box.textContent = "此類別目前沒有開放療程。";
-    return;
-  }
-
-  list.forEach(svc => {
-    const div = document.createElement("div");
-    div.className = "service-item";
-    const priceText = Number(svc.price || 0) > 0 ? `｜NT$ ${c60Money(svc.price)}` : "";
-    div.innerHTML = `${svc.name}<small>${svc.duration} 分鐘${priceText}｜點擊加入本次預約</small>`;
-    div.onclick = () => {
-      const staff = svc.default_staff || window.c60StaffMembers?.[0]?.name || "不指定";
-      addToCart({
-        name: svc.name,
-        category: svc.category_name || cat,
-        duration: Number(svc.duration || 60),
-        price: Number(svc.price || 0),
-        salary_type: svc.salary_type || "30",
-        fixed_salary: Number(svc.fixed_salary || 0),
-        service_item_id: svc.id || null,
-        cartId: Date.now()+Math.random(),
-        therapist: staff
-      });
-    };
-    box.appendChild(div);
-  });
-};
-
-window.renderTherapistSelect = function(item){
-  const staff = (window.c60StaffMembers && window.c60StaffMembers.length ? window.c60StaffMembers.map(s => s.name) : (categoryTherapists[item.category] || ["不指定"])).filter(n => !/美甲|曼曼/.test(String(n)));
-  const options = staff.map(t => `<option value="${t}" ${item.therapist===t?"selected":""}>${t}</option>`).join("");
-  return `<div class="field" style="margin-top:8px;margin-bottom:0;">
-    <label>服務人員</label>
-    <select onchange="changeItemTherapist('${item.cartId}', this.value)">${options}</select>
-  </div>`;
-};
-
-function c60EnsureLineHidden(){
-  let line = document.getElementById("lineName");
-  if(!line){
-    line = document.createElement("input");
-    line.type = "hidden";
-    line.id = "lineName";
-    line.value = "";
-    document.body.appendChild(line);
-  }
-  const field = line.closest(".field");
-  if(field) field.style.display = "none";
-}
-
-function c60EnsureBirthdayMonth(){
-  if(document.getElementById("birthdayMonth")) return;
-  const phone = document.querySelector("#phone, input[name='phone'], input[type='tel']");
-  const anchor = phone?.closest(".field") || phone?.parentElement;
-  if(!anchor) return;
-  const field = document.createElement("div");
-  field.className = "field";
-  field.innerHTML = `<label>生日月份</label><select id="birthdayMonth" name="birthday_month"><option value="">可不填</option>${Array.from({length:12},(_,i)=>`<option value="${i+1}月">${i+1}月</option>`).join("")}</select>`;
-  anchor.insertAdjacentElement("afterend", field);
-}
-
-async function c60LoadBookingSetting(){
-  try{
-    const {data,error} = await db.from("booking_settings").select("*").eq("id",1).single();
-    if(error) throw error;
-    return data || {booking_open_mode:"auto_2_months"};
-  }catch(e){
-    return {booking_open_mode:"auto_2_months"};
-  }
-}
-function c60ISO(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
-async function c60SetDateLimit(){
-  const input = $("date") || document.getElementById("bookingDate");
-  if(!input) return;
-  const s = await c60LoadBookingSetting();
-  const today = new Date();
-  const max = new Date();
-  max.setMonth(max.getMonth()+2);
-  if(s.booking_open_mode === "manual_range" && s.manual_start && s.manual_end){
-    input.min = s.manual_start;
-    input.max = s.manual_end;
-  }else{
-    input.min = c60ISO(today);
-    input.max = c60ISO(max);
-  }
-  if(!input.value || input.value < input.min) input.value = input.min;
-  if(input.value > input.max) input.value = input.max;
-}
-
-async function c60FrontInit(){
-  c60EnsureLineHidden();
-  c60EnsureBirthdayMonth();
-  await c60LoadFrontStaff();
-  await c60LoadFrontServices();
-  renderCategories();
-  await c60SetDateLimit();
-  if(typeof renderSlots === "function") renderSlots();
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  setTimeout(c60FrontInit, 500);
-});
-document.addEventListener("click", () => setTimeout(() => { c60EnsureLineHidden(); c60EnsureBirthdayMonth(); }, 150));
-document.addEventListener("change", () => setTimeout(c60SetDateLimit, 120));
-
-
-/* CONSTONIC FRONT V6.0 RC2
-   緊急穩定修正：
-   - 避免前台因 dbReady / services 未定義而空白
-   - 療程資料讀取失敗時保留原本頁面，不中斷
-   - LINE 欄位改隱藏，不破壞送出流程
-*/
-window.CONSTONIC_FRONT_VERSION = "V6.0 RC2";
+window.CONSTONIC_FRONT_VERSION = "V6.0 RC3";
 
 window.addEventListener("error", function(e){
-  console.warn("前台錯誤已攔截，不讓頁面空白：", e.message);
+  console.warn("前台錯誤攔截：", e.message);
 });
 
-async function c62SafeLoadServices(){
-  try{
-    if(typeof db === "undefined" || !db || !db.from) return false;
-    const [catRes,itemRes] = await Promise.all([
-      db.from("service_categories").select("*").eq("active",true).order("sort_order",{ascending:true}),
-      db.from("service_items").select("*").eq("active",true).order("sort_order",{ascending:true})
-    ]);
-    if(catRes.error || itemRes.error) return false;
-    window.c60ServiceCategories = (catRes.data || []).filter(c => !/美甲|曼曼/.test(String(c.name||"")));
-    window.c60ServiceItems = (itemRes.data || []).filter(i => !/美甲|曼曼/.test(String(i.name+i.category_name)));
-    return window.c60ServiceCategories.length > 0;
-  }catch(err){
-    console.warn("療程資料讀取失敗，使用原本內建療程", err);
-    return false;
-  }
-}
-
-function c62SafeRenderCategories(){
-  try{
-    const box = document.getElementById("categoryButtons");
-    if(!box) return;
-    if(window.c60ServiceCategories && window.c60ServiceCategories.length){
-      box.innerHTML = "";
-      window.c60ServiceCategories.forEach(c => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = c.name;
-        btn.onclick = () => {
-          if(typeof selectCategory === "function") selectCategory(c.name);
-        };
-        box.appendChild(btn);
-      });
-    }else if(typeof renderCategories === "function"){
-      renderCategories();
+function rc3RemoveNailAndExtra(){
+  document.querySelectorAll("option,button,label,.service-card,.service-item,.therapy-card,.cart-item").forEach(el=>{
+    if(/美甲|指甲|卸甲|曼曼|單色|造型/.test(el.textContent||el.value||"")){
+      el.remove();
     }
-  }catch(err){
-    console.warn("類別渲染失敗", err);
-  }
+  });
+  document.querySelectorAll("#nailRequestCard,.nail-consult-box,#c46CustomFields,#c47CustomFields,.c46-custom-fields").forEach(el=>el.remove());
 }
-
-function c62EnsureLineHidden(){
+function rc3HideLineKeepInput(){
   let line = document.getElementById("lineName");
   if(!line){
     line = document.createElement("input");
@@ -1987,8 +1706,7 @@ function c62EnsureLineHidden(){
   const field = line.closest(".field");
   if(field) field.style.display = "none";
 }
-
-function c62EnsureBirthday(){
+function rc3Birthday(){
   if(document.getElementById("birthdayMonth")) return;
   const phone = document.querySelector("#phone,input[name='phone'],input[type='tel']");
   const anchor = phone?.closest(".field") || phone?.parentElement;
@@ -1998,19 +1716,24 @@ function c62EnsureBirthday(){
   field.innerHTML = `<label>生日月份</label><select id="birthdayMonth" name="birthday_month"><option value="">可不填</option>${Array.from({length:12},(_,i)=>`<option value="${i+1}月">${i+1}月</option>`).join("")}</select>`;
   anchor.insertAdjacentElement("afterend", field);
 }
-
-async function c62InitFront(){
-  c62EnsureLineHidden();
-  c62EnsureBirthday();
-  await c62SafeLoadServices();
-  c62SafeRenderCategories();
+function rc3DateLimit(){
+  const input = document.getElementById("date") || document.getElementById("bookingDate");
+  if(!input) return;
+  const today = new Date();
+  const max = new Date();
+  max.setMonth(max.getMonth()+2);
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  input.min = iso(today);
+  input.max = iso(max);
+  if(!input.value || input.value < input.min) input.value = input.min;
+  if(input.value > input.max) input.value = input.max;
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-  setTimeout(c62InitFront, 500);
-  setTimeout(c62InitFront, 1500);
-});
-document.addEventListener("click", () => setTimeout(() => {
-  c62EnsureLineHidden();
-  c62EnsureBirthday();
-}, 150));
+function rc3Init(){
+  rc3HideLineKeepInput();
+  rc3Birthday();
+  rc3DateLimit();
+  rc3RemoveNailAndExtra();
+}
+document.addEventListener("DOMContentLoaded", ()=>{setTimeout(rc3Init,300);setTimeout(rc3Init,1200);});
+document.addEventListener("click", ()=>setTimeout(rc3Init,150));
+document.addEventListener("change", ()=>setTimeout(rc3Init,150));

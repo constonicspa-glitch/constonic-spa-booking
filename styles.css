@@ -439,3 +439,12 @@ button,.primary{
   margin-left:16px;
   margin-right:16px;
 }
+
+
+/* CONSTONIC V6.0 RC3 */
+.rc3-payment-hint{
+  display:block;
+  margin-top:6px;
+  color:#8a6d34;
+  font-size:13px;
+}

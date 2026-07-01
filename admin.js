@@ -1796,3 +1796,82 @@ document.addEventListener("click", () => setTimeout(() => {
   c62RemoveDuplicateStaffPanels();
   c62MakeVacationCollapsed();
 }, 200));
+
+
+/* CONSTONIC ADMIN V6.0 RC3
+   修正扣儲值／扣課程／團購券／免收款時，本次實收不把技術金額算進去。
+   技術金額仍保留用於薪資計算。
+*/
+window.CONSTONIC_ADMIN_VERSION = "V6.0 RC3";
+
+function rc3IsNonCashPayment(method){
+  return ["扣儲值","扣課程","團購券","免收款"].includes(String(method || ""));
+}
+
+function rc3CollectTechRows(){
+  const rows = [];
+  document.querySelectorAll("#techRows .tech-row, #techRows .v3-tech-row, #v2TechRows .v3-tech-row").forEach((row,idx)=>{
+    const name = document.getElementById(`techName_${idx}`)?.value || document.getElementById(`v2TechName_${idx}`)?.value || row.querySelector("input")?.value || "";
+    const amount = Number(document.getElementById(`techAmount_${idx}`)?.value || document.getElementById(`v2TechAmount_${idx}`)?.value || row.querySelectorAll("input")[1]?.value || 0);
+    const rate = document.getElementById(`techRate_${idx}`)?.value || document.getElementById(`v2TechRate_${idx}`)?.value || row.querySelector("select")?.value || "30";
+    const fixed = Number(document.getElementById(`fixedSalary_${idx}`)?.value || 0);
+    rows.push({item_name:name, amount, rate, fixed_salary:fixed});
+  });
+  return rows;
+}
+
+function rc3CheckoutTotals(){
+  const method = document.getElementById("paymentMethod")?.value || document.getElementById("v2PaymentMethod")?.value || "現金";
+  const rows = rc3CollectTechRows();
+
+  let techReceived = 0, tech30 = 0, tech40 = 0, fixed = 0;
+  rows.forEach(r=>{
+    const amount = Number(r.amount||0);
+    if(!rc3IsNonCashPayment(method)) techReceived += amount;
+    if(String(r.rate)==="30") tech30 += Math.round(amount*.3);
+    else if(String(r.rate)==="40") tech40 += Math.round(amount*.4);
+    else if(String(r.rate)==="fixed") fixed += Number(r.fixed_salary || amount || 0);
+  });
+
+  const product = Number(document.getElementById("productAmount")?.value || document.getElementById("v2ProductAmount")?.value || 0);
+  const course = Number(document.getElementById("courseAmount")?.value || document.getElementById("v2CourseAmount")?.value || 0);
+  const stored = Number(document.getElementById("storedValueAmount")?.value || document.getElementById("v2StoredValueAmount")?.value || 0);
+  const totalReceived = techReceived + product + course + stored;
+
+  return {method, rows, techReceived, product, course, stored, totalReceived, tech30, tech40, fixed, salaryTotal:tech30+tech40+fixed+Math.round(product*.1)+Math.round((course+stored)*.02)};
+}
+
+function rc3ApplyCheckoutTotals(){
+  const t = rc3CheckoutTotals();
+  const totalInput = document.getElementById("totalReceived") || document.getElementById("v2TotalReceived");
+  if(totalInput){
+    totalInput.value = t.totalReceived;
+    totalInput.readOnly = true;
+  }
+  const fixedEl = document.getElementById("salaryFixed");
+  if(fixedEl) fixedEl.textContent = "NT$ " + Number(t.fixed).toLocaleString("zh-TW");
+  const totalEl = document.getElementById("salaryTotal");
+  if(totalEl) totalEl.textContent = "NT$ " + Number(t.salaryTotal).toLocaleString("zh-TW");
+
+  let hint = document.getElementById("rc3PaymentHint");
+  if(!hint && totalInput){
+    hint = document.createElement("div");
+    hint.id = "rc3PaymentHint";
+    hint.className = "hint rc3-payment-hint";
+    totalInput.closest(".field")?.appendChild(hint);
+  }
+  if(hint){
+    hint.textContent = rc3IsNonCashPayment(t.method)
+      ? "目前收款方式為扣儲值／扣課程／團購券／免收款，技術金額不列入本次實收。"
+      : "本次實收＝技術金額＋商品＋新購課程＋新儲值。";
+  }
+}
+
+document.addEventListener("input", e=>{
+  if(e.target.closest(".cashier-panel,.v3-cashier-panel,#bookingModal")) setTimeout(rc3ApplyCheckoutTotals,80);
+});
+document.addEventListener("change", e=>{
+  if(e.target.closest(".cashier-panel,.v3-cashier-panel,#bookingModal")) setTimeout(rc3ApplyCheckoutTotals,80);
+});
+document.addEventListener("click", ()=>setTimeout(rc3ApplyCheckoutTotals,300));
+document.addEventListener("DOMContentLoaded", ()=>setTimeout(rc3ApplyCheckoutTotals,1200));
