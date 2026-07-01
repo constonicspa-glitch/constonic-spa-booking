@@ -1009,3 +1009,311 @@ function c49RemoveNailFromAdmin(){document.querySelectorAll(".calendar-head, opt
 window.v41StaffList=function(bookings,filter){const active=c49AdminActiveStaff().map(s=>s.name);if(filter&&filter!=="全部"&&active.includes(filter))return[filter];return active;};
 document.addEventListener("DOMContentLoaded",()=>{setTimeout(c49InjectStaffPanel,900);setTimeout(c49RemoveNailFromAdmin,1000);});
 document.addEventListener("click",()=>setTimeout(c49RemoveNailFromAdmin,200));
+
+
+/* CONSTONIC ADMIN V5.0
+   修正後台行事曆欄位錯位：
+   - 強制用同一份人員名單產生標題與內容欄
+   - 移除美甲欄位
+   - 手機版改橫向滑動，不壓縮、不錯位
+*/
+window.CONSTONIC_ADMIN_VERSION = "V5.0";
+
+function c50Staff(){
+  try{
+    if(typeof c49AdminActiveStaff === "function"){
+      const list = c49AdminActiveStaff().map(s => s.name).filter(Boolean);
+      return list.length ? list : ["雅潔老師","巧萱美容師"];
+    }
+  }catch(e){}
+  try{
+    const saved = JSON.parse(localStorage.getItem("constonic_staff_members") || "[]");
+    const active = saved.filter(s => s && s.active !== false && s.type !== "美甲" && !/美甲|曼曼/.test(String(s.name||""))).map(s => s.name);
+    return active.length ? active : ["雅潔老師","巧萱美容師"];
+  }catch(e){
+    return ["雅潔老師","巧萱美容師"];
+  }
+}
+
+function c50TimeToMin(t){
+  const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+function c50MinToTime(min){
+  return String(Math.floor(min/60)).padStart(2,"0") + ":" + String(min%60).padStart(2,"0");
+}
+function c50IsNailText(t){
+  return /美甲|曼曼|指甲|卸甲|手部|足部|單色|造型/.test(String(t||""));
+}
+function c50StaffName(name){
+  const list = c50Staff();
+  return list.includes(name) ? name : "不指定";
+}
+function c50Segments(bookings){
+  const segs = [];
+  (bookings || []).forEach(b => {
+    if(b.status === "cancelled") return;
+    const base = c50TimeToMin(b.slot);
+    if(base === null) return;
+
+    const items = Array.isArray(b.items) ? b.items : [];
+    if(!items.length){
+      const staff = c50StaffName(b.therapist);
+      segs.push({booking:b, item:{name:"預約", duration:Number(b.service_minutes||0)}, idx:0, staff, start:b.slot});
+      return;
+    }
+
+    let offset = 0;
+    items.forEach((item, idx) => {
+      const dur = Number(item.duration || 0);
+      if(dur <= 0) return;
+      if(c50IsNailText([item.name,item.category,item.therapist,b.therapist].join(" "))){
+        offset += dur;
+        return;
+      }
+      const staff = c50StaffName(item.therapist || b.therapist);
+      segs.push({
+        booking:b,
+        item,
+        idx,
+        staff,
+        start:c50MinToTime(base + offset)
+      });
+      offset += dur;
+    });
+  });
+  return segs.filter(s => s.staff !== "不指定");
+}
+function c50StatusText(s){
+  if(typeof statusText === "function") return statusText(s);
+  return ({pending:"待確認",confirmed:"已確認",completed:"已完成",cancelled:"已取消"}[s] || s || "待確認");
+}
+function c50Class(staff){
+  if(typeof therapistClass === "function") return therapistClass(staff);
+  return "";
+}
+function c50Card(seg){
+  const b = seg.booking;
+  const item = seg.item || {};
+  return `<div class="booking-card c50-card ${c50Class(seg.staff)}" draggable="true" ondragstart="dragBooking(event,'${escapeHtml(b.id)}')" onclick="openBookingModal('${escapeHtml(b.id)}')">
+    <div class="booking-color-strip"></div>
+    <strong>${escapeHtml(seg.start)}｜${escapeHtml(b.customer_name || "-")}</strong>
+    <div>${seg.idx + 1}. ${escapeHtml(item.name || "-")}（${Number(item.duration || 0)}分）</div>
+    <div class="hint">${escapeHtml(seg.staff)}｜${c50StatusText(b.status)}</div>
+  </div>`;
+}
+
+window.renderBookings = async function(){
+  const date = document.getElementById("date")?.value;
+  const box = document.getElementById("calendarView");
+  const title = document.getElementById("calendarTitle");
+  const filter = document.getElementById("therapistFilter")?.value || "全部";
+  const mode = document.getElementById("viewMode")?.value || "calendar";
+  if(!date || !box) return;
+
+  if(title) title.textContent = `${date} 行事曆`;
+  box.innerHTML = "載入中...";
+
+  const {data,error} = await db.from("bookings").select("*").eq("date", date).order("slot", {ascending:true});
+  if(error){
+    console.error(error);
+    box.innerHTML = "<p class='muted'>讀取失敗。</p>";
+    return;
+  }
+
+  const bookings = data || [];
+  window.currentBookings = bookings;
+
+  if(typeof renderStats === "function") renderStats(date, bookings);
+  if(typeof renderPendingCenter === "function") renderPendingCenter();
+  if(typeof renderTodayWorklist === "function") renderTodayWorklist();
+
+  const staffAll = c50Staff();
+  const staffList = (filter && filter !== "全部") ? staffAll.filter(s => s === filter) : staffAll;
+  const segments = c50Segments(bookings).filter(s => staffList.includes(s.staff));
+
+  if(mode === "list"){
+    box.innerHTML = bookings.map(b => typeof listBookingCard === "function" ? listBookingCard(b) : "").join("");
+    return;
+  }
+
+  const timeSet = new Set();
+  for(let m = 600; m <= 1200; m += 30) timeSet.add(c50MinToTime(m));
+  segments.forEach(s => timeSet.add(s.start));
+  const times = Array.from(timeSet).sort((a,b) => c50TimeToMin(a) - c50TimeToMin(b));
+
+  let html = `<div class="calendar-grid c50-calendar-grid" style="grid-template-columns:86px repeat(${staffList.length}, minmax(230px, 1fr));">`;
+  html += `<div class="calendar-head time-head">時間</div>`;
+  staffList.forEach(staff => {
+    html += `<div class="calendar-head ${c50Class(staff)}">${escapeHtml(staff)}</div>`;
+  });
+
+  times.forEach(t => {
+    html += `<div class="time-cell">${t}</div>`;
+    staffList.forEach(staff => {
+      const cards = segments.filter(s => s.staff === staff && s.start === t);
+      html += `<div class="calendar-cell droppable-slot" data-time="${t}" data-therapist="${escapeHtml(staff)}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropBooking(event,'${t}','${escapeHtml(staff)}')">${cards.map(c50Card).join("")}</div>`;
+    });
+  });
+  html += `</div>`;
+  box.innerHTML = html;
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    if(typeof renderBookings === "function") renderBookings();
+  }, 900);
+});
+
+
+/* CONSTONIC ADMIN V5.1
+   後台人員管理改存 Supabase，前台可同步
+*/
+window.CONSTONIC_ADMIN_VERSION = "V5.1";
+
+async function c51LoadStaffDB(){
+  try{
+    const {data, error} = await db
+      .from("staff_members")
+      .select("*")
+      .order("sort_order", {ascending:true});
+    if(error) throw error;
+    const list = (data || []).filter(s => s.type !== "美甲" && !/美甲|曼曼/.test(String(s.name || "")));
+    localStorage.setItem("constonic_staff_members", JSON.stringify(list));
+    return list;
+  }catch(e){
+    console.warn("staff_members 讀取失敗，改用本機資料", e);
+    try{
+      return JSON.parse(localStorage.getItem("constonic_staff_members") || "[]");
+    }catch(err){
+      return [
+        {name:"雅潔老師", type:"SPA", active:true, color:"pink", sort_order:1},
+        {name:"巧萱美容師", type:"SPA", active:true, color:"purple", sort_order:2}
+      ];
+    }
+  }
+}
+
+function c51InjectStaffPanel(){
+  let old = document.getElementById("c49StaffPanel");
+  if(old) old.remove();
+  if(document.getElementById("c51StaffPanel")) return;
+
+  const main = document.getElementById("adminMain") || document.querySelector("main") || document.body;
+  const card = document.createElement("section");
+  card.id = "c51StaffPanel";
+  card.className = "card";
+  card.innerHTML = `
+    <h2>人員管理</h2>
+    <p class="hint">新增、停用或刪除後會存到 Supabase，前台重新整理後同步。</p>
+    <div class="form-grid">
+      <div class="field">
+        <label>新增人員名稱</label>
+        <input id="c51StaffName" placeholder="例如：小安美容師">
+      </div>
+      <div class="field">
+        <label>類型</label>
+        <select id="c51StaffType">
+          <option value="SPA">SPA／臉部／身體</option>
+          <option value="其他">其他</option>
+        </select>
+      </div>
+    </div>
+    <button type="button" class="primary" onclick="c51AddStaff()">＋新增人員</button>
+    <div id="c51StaffList" class="c49-staff-list"></div>
+  `;
+  main.appendChild(card);
+  c51RenderStaffList();
+}
+
+async function c51RenderStaffList(){
+  const box = document.getElementById("c51StaffList");
+  if(!box) return;
+  const list = await c51LoadStaffDB();
+  box.innerHTML = list.map((s,idx)=>`
+    <div class="c49-staff-row">
+      <div>
+        <strong>${escapeHtml(s.name)}</strong>
+        <span>${escapeHtml(s.type || "SPA")}｜${s.active === false ? "已停用" : "啟用中"}</span>
+      </div>
+      <div>
+        <button type="button" onclick="c51ToggleStaff('${s.id}', ${s.active === false ? "true" : "false"})">${s.active === false ? "啟用" : "停用"}</button>
+        <button type="button" class="danger-soft" onclick="c51DeleteStaff('${s.id}')">刪除</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+window.c51AddStaff = async function(){
+  const name = document.getElementById("c51StaffName")?.value?.trim();
+  const type = document.getElementById("c51StaffType")?.value || "SPA";
+  if(!name){ alert("請輸入人員名稱"); return; }
+  if(/美甲|曼曼/.test(name)){ alert("美甲暫不放入預約系統，請使用私訊詢問。"); return; }
+
+  const list = await c51LoadStaffDB();
+  if(list.some(s => s.name === name)){ alert("此人員已存在"); return; }
+
+  const {error} = await db.from("staff_members").insert({
+    name,
+    type,
+    active:true,
+    color:"green",
+    sort_order:(list.length + 1) * 10
+  });
+
+  if(error){
+    alert("新增失敗，請確認已執行 V5.1 SQL。");
+    console.error(error);
+    return;
+  }
+
+  document.getElementById("c51StaffName").value = "";
+  await c51RenderStaffList();
+  alert("人員已新增，前台重新整理後會同步。");
+};
+
+window.c51ToggleStaff = async function(id, active){
+  const {error} = await db.from("staff_members").update({active}).eq("id", id);
+  if(error){
+    alert("更新失敗");
+    console.error(error);
+    return;
+  }
+  await c51RenderStaffList();
+};
+
+window.c51DeleteStaff = async function(id){
+  if(!confirm("確定刪除這位人員？")) return;
+  const {error} = await db.from("staff_members").delete().eq("id", id);
+  if(error){
+    alert("刪除失敗");
+    console.error(error);
+    return;
+  }
+  await c51RenderStaffList();
+};
+
+window.c49AdminActiveStaff = function(){
+  try{
+    const cached = JSON.parse(localStorage.getItem("constonic_staff_members") || "[]");
+    const active = cached.filter(s => s.active !== false && s.type !== "美甲" && !/美甲|曼曼/.test(String(s.name || "")));
+    return active.length ? active : [
+      {name:"雅潔老師", active:true, type:"SPA"},
+      {name:"巧萱美容師", active:true, type:"SPA"}
+    ];
+  }catch(e){
+    return [
+      {name:"雅潔老師", active:true, type:"SPA"},
+      {name:"巧萱美容師", active:true, type:"SPA"}
+    ];
+  }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(c51InjectStaffPanel, 800);
+  setTimeout(async () => {
+    await c51LoadStaffDB();
+    if(typeof renderBookings === "function") renderBookings();
+  }, 1200);
+});

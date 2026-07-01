@@ -191,3 +191,47 @@ button:disabled{
 .c49-staff-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid rgba(185,144,60,.25);border-radius:16px;background:#fffdf8;}
 .c49-staff-row span{display:block;color:var(--brown);font-size:14px;margin-top:4px;}
 @media(max-width:760px){.calendar-grid{min-width:760px !important;}#calendarView{overflow-x:auto !important;-webkit-overflow-scrolling:touch;}.calendar-cell{min-width:210px !important;}.booking-card{max-width:190px;}.c49-slot-grid{grid-template-columns:repeat(2,1fr);gap:12px;}.c49-slot{min-height:58px !important;font-size:18px !important;}.c49-staff-row{align-items:flex-start;flex-direction:column;}}
+
+
+/* CONSTONIC V5.0 */
+.c50-calendar-grid{
+  width:100%;
+  border-collapse:collapse;
+}
+.c50-calendar-grid .calendar-head,
+.c50-calendar-grid .time-cell,
+.c50-calendar-grid .calendar-cell{
+  box-sizing:border-box;
+}
+.c50-calendar-grid .calendar-cell{
+  min-height:96px;
+  position:relative;
+}
+.c50-card{
+  width:auto;
+  max-width:none;
+}
+@media(max-width:900px){
+  #calendarView{
+    overflow-x:auto !important;
+    overflow-y:visible !important;
+    -webkit-overflow-scrolling:touch;
+    padding-bottom:10px;
+  }
+  .c50-calendar-grid{
+    min-width:620px !important;
+  }
+  .c50-calendar-grid .calendar-cell{
+    min-width:230px !important;
+  }
+  .c50-calendar-grid .booking-card{
+    max-width:210px !important;
+    font-size:14px;
+  }
+}
+
+
+/* CONSTONIC V5.1 */
+#c51StaffPanel{
+  margin-top:24px;
+}

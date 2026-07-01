@@ -1587,3 +1587,85 @@ document.addEventListener("click",e=>{const btn=e.target.closest(".slot-btn,.slo
 document.addEventListener("DOMContentLoaded",()=>{c49RemoveNailUI();c49SetDateLimit();setTimeout(()=>{if(typeof renderSlots==="function")renderSlots();},700);});
 document.addEventListener("change",()=>setTimeout(()=>{c49RemoveNailUI();if(typeof renderSlots==="function")renderSlots();},150));
 document.addEventListener("click",()=>setTimeout(()=>{c49RemoveNailUI();if(typeof renderSlots==="function")renderSlots();},180));
+
+
+/* CONSTONIC FRONT V5.0
+   移除前台其他需求補充區塊，保留簡潔預約流程
+*/
+window.CONSTONIC_FRONT_VERSION = "V5.0";
+
+function c50RemoveExtraRequestFields(){
+  document.querySelectorAll("#c46CustomFields,#c47CustomFields,.c46-custom-fields").forEach(el => el.remove());
+  document.querySelectorAll("textarea").forEach(t => {
+    const label = t.closest(".field")?.querySelector("label")?.textContent || "";
+    const ph = t.getAttribute("placeholder") || "";
+    if(/其他需求|其他療程|美甲其他|臉部／身體/.test(label + ph)){
+      (t.closest(".field") || t.parentElement)?.remove();
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(c50RemoveExtraRequestFields, 300);
+  setTimeout(c50RemoveExtraRequestFields, 1200);
+});
+document.addEventListener("click", () => setTimeout(c50RemoveExtraRequestFields, 150));
+document.addEventListener("change", () => setTimeout(c50RemoveExtraRequestFields, 150));
+
+
+/* CONSTONIC FRONT V5.1
+   前台人員名單改讀 Supabase staff_members
+*/
+window.CONSTONIC_FRONT_VERSION = "V5.1";
+
+const C51_DEFAULT_STAFF = [
+  {name:"雅潔老師", active:true, type:"SPA"},
+  {name:"巧萱美容師", active:true, type:"SPA"}
+];
+
+async function c51LoadStaffFromDB(){
+  try{
+    const {data, error} = await db
+      .from("staff_members")
+      .select("*")
+      .eq("active", true)
+      .order("sort_order", {ascending:true});
+    if(error) throw error;
+    const list = (data || []).filter(s => s && s.type !== "美甲" && !/美甲|曼曼/.test(String(s.name || "")));
+    if(list.length){
+      localStorage.setItem("constonic_staff_members", JSON.stringify(list));
+      return list;
+    }
+  }catch(e){
+    console.warn("讀取 staff_members 失敗，使用預設人員", e);
+  }
+  return C51_DEFAULT_STAFF;
+}
+
+window.c51GetActiveStaff = async function(){
+  return await c51LoadStaffFromDB();
+};
+
+function c51RenderStaffSelectors(list){
+  const names = (list || C51_DEFAULT_STAFF).map(s => s.name);
+  document.querySelectorAll("select").forEach(sel => {
+    const label = sel.closest(".field")?.querySelector("label")?.textContent || "";
+    const related = /服務人員|美容師/.test(label) || Array.from(sel.options).some(o => /雅潔|巧萱|美容師|老師/.test(o.textContent));
+    if(!related) return;
+
+    const current = sel.value;
+    sel.innerHTML = names.map(n => `<option value="${n}" ${current === n ? "selected" : ""}>${n}</option>`).join("");
+  });
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const staff = await c51LoadStaffFromDB();
+  c51RenderStaffSelectors(staff);
+});
+
+document.addEventListener("click", async () => {
+  setTimeout(async () => {
+    const staff = await c51LoadStaffFromDB();
+    c51RenderStaffSelectors(staff);
+  }, 300);
+});
