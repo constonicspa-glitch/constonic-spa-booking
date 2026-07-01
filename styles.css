@@ -78,3 +78,35 @@ button:disabled{
   font-weight:700;
   font-size:14px;
 }
+
+
+/* CONSTONIC V4.4 */
+.slot-btn.selected,
+.slot-button.selected{
+  background:var(--green) !important;
+  color:#fff !important;
+  border-color:var(--gold) !important;
+}
+.slot-btn:not(:disabled),
+.slot-button:not(:disabled){
+  cursor:pointer;
+}
+.c44-tech-row{
+  grid-template-columns:1fr .7fr .7fr;
+}
+@media(max-width:900px){
+  .c44-tech-row{
+    grid-template-columns:1fr;
+  }
+}
+
+
+/* CONSTONIC V4.5 */
+.c45-nail-notice{margin-bottom:14px;}
+.slot-grid{display:flex;flex-wrap:wrap;gap:12px;}
+.slot-btn.selected,.slot-button.selected{
+  background:var(--green) !important;
+  color:#fff !important;
+  border-color:var(--gold) !important;
+  box-shadow:0 10px 20px rgba(32,61,50,.18);
+}

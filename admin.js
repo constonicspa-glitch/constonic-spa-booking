@@ -838,3 +838,148 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 setTimeout(c43PatchTechRows, 1000);
+
+
+/* =========================
+   CONSTONIC ADMIN V4.4
+   修復：
+   1. 新增預約項目時，同步新增技術薪資列
+   2. 技術抽成強制支援 30% / 40% / 固定薪資
+   3. 固定薪資直接用金額欄作為員工獎金
+========================= */
+window.CONSTONIC_ADMIN_VERSION = "V4.4";
+
+function c44RateOptions(selected){
+  return `
+    <option value="30" ${String(selected)==="30"?"selected":""}>30%</option>
+    <option value="40" ${String(selected)==="40"?"selected":""}>40%</option>
+    <option value="fixed" ${String(selected)==="fixed"?"selected":""}>固定薪資</option>
+  `;
+}
+
+function c44TechRowHtml(itemName="", amount=0, rate="30", idx=0){
+  return `<div class="v3-tech-row c44-tech-row">
+    <div class="field"><label>項目</label><input id="v2TechName_${idx}" value="${escapeHtml(itemName)}"></div>
+    <div class="field"><label>金額／固定薪資</label><input id="v2TechAmount_${idx}" type="number" min="0" value="${Number(amount||0)}" placeholder="金額"></div>
+    <div class="field"><label>抽成</label><select id="v2TechRate_${idx}">${c44RateOptions(rate)}</select></div>
+  </div>`;
+}
+
+function c44SyncTechRowsFromEditItems(){
+  const editRows = Array.from(document.querySelectorAll("#editItemsBox .edit-item-row, #v31ItemRows .v31-item-row"));
+  const techBox = document.getElementById("v2TechRows");
+  if(!techBox || !editRows.length) return;
+
+  const oldRows = Array.from(techBox.querySelectorAll(".v3-tech-row,.tech-row,.cashier-row"));
+  const oldData = oldRows.map((row, idx) => ({
+    name: row.querySelector(`#v2TechName_${idx}`)?.value || row.querySelector("input")?.value || "",
+    amount: Number(row.querySelector(`#v2TechAmount_${idx}`)?.value || row.querySelectorAll("input")[1]?.value || 0),
+    rate: row.querySelector(`#v2TechRate_${idx}`)?.value || row.querySelector("select")?.value || "30"
+  }));
+
+  const items = editRows.map((row, idx) => {
+    const inputs = row.querySelectorAll("input");
+    const name = inputs[0]?.value || oldData[idx]?.name || "";
+    return {
+      name,
+      amount: oldData[idx]?.amount || 0,
+      rate: oldData[idx]?.rate || "30"
+    };
+  });
+
+  techBox.dataset.count = items.length;
+  techBox.innerHTML = items.map((it, idx)=>c44TechRowHtml(it.name, it.amount, it.rate, idx)).join("");
+  c44PatchRateSelects();
+  c44RecalcSalary();
+}
+
+function c44PatchRateSelects(){
+  document.querySelectorAll('select[id*="TechRate"], select[data-rate-select]').forEach((sel, idx) => {
+    const current = sel.value || "30";
+    sel.innerHTML = c44RateOptions(current);
+    sel.value = current === "fixed" ? "fixed" : (current === "40" ? "40" : "30");
+  });
+}
+
+function c44RecalcSalary(){
+  let tech30 = 0, tech40 = 0, fixed = 0;
+  document.querySelectorAll("#v2TechRows .v3-tech-row, #v2TechRows .tech-row, #v2TechRows .cashier-row").forEach((row, idx) => {
+    const amount = Number(document.getElementById(`v2TechAmount_${idx}`)?.value || row.querySelectorAll("input")[1]?.value || 0);
+    const rate = document.getElementById(`v2TechRate_${idx}`)?.value || row.querySelector("select")?.value || "30";
+    if(rate === "30") tech30 += Math.round(amount * .3);
+    if(rate === "40") tech40 += Math.round(amount * .4);
+    if(rate === "fixed") fixed += amount;
+  });
+
+  const box = document.querySelector(".v3-salary-card,.salary-summary");
+  if(!box) return;
+
+  function setLine(label, value){
+    let row = Array.from(box.querySelectorAll("div")).find(d => d.textContent.includes(label));
+    if(!row && label === "固定薪資"){
+      row = document.createElement("div");
+      row.className = "c44-fixed-salary-row";
+      row.innerHTML = `<span>固定薪資</span><strong>NT$ 0</strong>`;
+      const total = box.querySelector(".total");
+      if(total) box.insertBefore(row, total); else box.appendChild(row);
+    }
+    const strong = row?.querySelector("strong");
+    if(strong) strong.textContent = "NT$ " + Number(value||0).toLocaleString("zh-TW");
+  }
+
+  setLine("技術30%", tech30);
+  setLine("技術40%", tech40);
+  setLine("固定薪資", fixed);
+
+  const money = label => Number(String(Array.from(box.querySelectorAll("div")).find(d => d.textContent.includes(label))?.querySelector("strong")?.textContent || "0").replace(/[^\d.-]/g,"") || 0);
+  const totalEl = box.querySelector(".total strong");
+  if(totalEl){
+    const total = tech30 + tech40 + fixed + money("商品") + money("課程") + money("平台");
+    totalEl.textContent = "NT$ " + total.toLocaleString("zh-TW");
+  }
+}
+
+function c44BindSync(){
+  c44PatchRateSelects();
+  c44SyncTechRowsFromEditItems();
+
+  document.querySelectorAll("#editItemsBox input, #v31ItemRows input, #editItemsBox select, #v31ItemRows select").forEach(el => {
+    if(el.dataset.c44SyncBound) return;
+    el.dataset.c44SyncBound = "1";
+    el.addEventListener("input", () => setTimeout(c44SyncTechRowsFromEditItems, 50));
+    el.addEventListener("change", () => setTimeout(c44SyncTechRowsFromEditItems, 50));
+  });
+
+  document.querySelectorAll("#v2TechRows input, #v2TechRows select").forEach(el => {
+    if(el.dataset.c44SalaryBound) return;
+    el.dataset.c44SalaryBound = "1";
+    el.addEventListener("input", c44RecalcSalary);
+    el.addEventListener("change", c44RecalcSalary);
+  });
+
+  c44RecalcSalary();
+}
+
+const c44OldAddItemRow = typeof addEditItemRow === "function" ? addEditItemRow : null;
+window.addEditItemRow = function(){
+  if(c44OldAddItemRow) c44OldAddItemRow();
+  else if(typeof v31AddItemRow === "function") v31AddItemRow();
+  setTimeout(c44SyncTechRowsFromEditItems, 80);
+};
+
+const c44OldV31Add = typeof v31AddItemRow === "function" ? v31AddItemRow : null;
+window.v31AddItemRow = function(){
+  if(c44OldV31Add) c44OldV31Add();
+  setTimeout(c44SyncTechRowsFromEditItems, 80);
+};
+
+const c44Observer = new MutationObserver(() => c44BindSync());
+document.addEventListener("DOMContentLoaded", () => {
+  c44Observer.observe(document.body, {childList:true, subtree:true});
+  setTimeout(c44BindSync, 500);
+  setTimeout(c44BindSync, 1500);
+});
+setTimeout(c44BindSync, 1200);
+
+/* CONSTONIC ADMIN V4.5 */
+window.CONSTONIC_ADMIN_VERSION = 'V4.5';

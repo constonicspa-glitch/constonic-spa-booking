@@ -796,3 +796,209 @@ document.addEventListener("change", () => {
     if(typeof renderSlots === "function") renderSlots();
   }, 150);
 });
+
+
+/* =========================
+   CONSTONIC FRONT V4.4
+   修復：前台可預約時間顯示但無法點擊
+========================= */
+window.CONSTONIC_FRONT_VERSION = "V4.4";
+
+function c44SetSelectedSlot(time){
+  window.selectedSlot = time;
+  try { selectedSlot = time; } catch(e) {}
+
+  document.querySelectorAll(".slot-btn,.slot-button").forEach(btn => {
+    btn.classList.toggle("selected", btn.dataset.time === time || btn.textContent.trim().startsWith(time));
+  });
+
+  const hidden = document.getElementById("selectedSlot") || document.querySelector('input[name="slot"]');
+  if(hidden) hidden.value = time;
+
+  const contactCard = document.getElementById("contactCard") || document.getElementById("customerCard") || document.querySelector("#bookingForm") || document.querySelector(".contact-card");
+  if(contactCard){
+    contactCard.classList.remove("hidden");
+    contactCard.scrollIntoView({behavior:"smooth", block:"start"});
+  }
+}
+
+window.selectSlot = function(time){
+  c44SetSelectedSlot(time);
+};
+
+async function c44RenderSlots(){
+  const box = document.getElementById("slotList") || document.getElementById("slots") || document.querySelector(".slot-list");
+  const dateInput = document.getElementById("date") || document.getElementById("bookingDate");
+  if(!box || !dateInput) return false;
+
+  if(typeof c43RenderNailConsultSlots === "function" && c43RenderNailConsultSlots()) return true;
+
+  const date = dateInput.value;
+  if(!date) return false;
+
+  const {data, error} = await db.from("bookings").select("*").eq("date", date);
+  if(error){
+    console.error(error);
+    box.innerHTML = "<p>讀取時段失敗，請稍後再試。</p>";
+    return true;
+  }
+
+  const bookings = data || [];
+  const times = ["10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"];
+
+  box.innerHTML = times.map(t => {
+    const ok = (typeof c42IsSlotAvailableBySegments === "function") ? c42IsSlotAvailableBySegments(bookings, t) : true;
+    return `<button type="button" class="slot-btn ${ok ? "" : "disabled"}" data-time="${t}" ${ok ? "" : "disabled"}>${t}${ok ? "" : " 已滿"}</button>`;
+  }).join("");
+
+  return true;
+}
+
+const c44OldRenderSlots = typeof renderSlots === "function" ? renderSlots : null;
+window.renderSlots = async function(){
+  const handled = await c44RenderSlots();
+  if(!handled && c44OldRenderSlots) return c44OldRenderSlots();
+};
+
+document.addEventListener("click", function(e){
+  const btn = e.target.closest(".slot-btn,.slot-button");
+  if(!btn) return;
+  if(btn.disabled || btn.classList.contains("disabled")) return;
+  const time = btn.dataset.time || (btn.textContent.match(/\d{1,2}:\d{2}/)||[])[0];
+  if(time){
+    e.preventDefault();
+    c44SetSelectedSlot(time);
+  }
+}, true);
+
+
+/* CONSTONIC FRONT V4.5 - 美甲不佔用 SPA / 臉部 / 身體時段 */
+window.CONSTONIC_FRONT_VERSION = "V4.5";
+
+function c45IsNailItem(item){
+  const text = [item?.name,item?.category,item?.therapist,item?.type].map(v => String(v || "")).join(" ");
+  return /美甲|指甲|卸甲|手部|足部|單色|造型|曼曼/.test(text);
+}
+function c45Cart(){
+  try{
+    if(Array.isArray(window.cart)) return window.cart;
+    if(typeof cart !== "undefined" && Array.isArray(cart)) return cart;
+  }catch(e){}
+  return [];
+}
+function c45SpaCartItems(){ return c45Cart().filter(item => !c45IsNailItem(item)); }
+function c45HasNail(){ return c45Cart().some(c45IsNailItem); }
+function c45HasSpa(){ return c45SpaCartItems().length > 0; }
+function c45TimeToMin(t){
+  const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+function c45NormalizeStaff(name){
+  if(["雅潔老師","巧萱美容師","曼曼美甲師"].includes(name)) return name;
+  return "不指定";
+}
+function c45BookingSegments(bookings){
+  const segs = [];
+  (bookings || []).forEach(b => {
+    if(b.status === "cancelled") return;
+    const base = c45TimeToMin(b.slot);
+    if(base === null) return;
+    let offset = 0;
+    (b.items || []).forEach(item => {
+      const duration = Number(item.duration || 0);
+      if(duration <= 0) return;
+      if(c45IsNailItem(item)){
+        offset += duration;
+        return;
+      }
+      segs.push({therapist:c45NormalizeStaff(item.therapist || b.therapist), start:base + offset, end:base + offset + duration});
+      offset += duration;
+    });
+  });
+  return segs;
+}
+function c45NeedSegments(startMin){
+  const segs = [];
+  let offset = 0;
+  c45SpaCartItems().forEach(item => {
+    const duration = Number(item.duration || 0);
+    if(duration <= 0) return;
+    let fallbackTherapist = "不指定";
+    try{ fallbackTherapist = selectedTherapist || "不指定"; }catch(e){}
+    segs.push({therapist:c45NormalizeStaff(item.therapist || fallbackTherapist), start:startMin + offset, end:startMin + offset + duration});
+    offset += duration;
+  });
+  return segs;
+}
+function c45Overlap(aStart, aEnd, bStart, bEnd){ return aStart < bEnd && aEnd > bStart; }
+function c45IsAvailable(bookings, time){
+  const start = c45TimeToMin(time);
+  if(start === null) return false;
+  const need = c45NeedSegments(start);
+  if(!need.length && c45HasNail()) return false;
+  const busy = c45BookingSegments(bookings);
+  return need.every(n => {
+    if(n.therapist === "不指定") return !busy.some(b => c45Overlap(n.start, n.end, b.start, b.end));
+    return !busy.some(b => b.therapist === n.therapist && c45Overlap(n.start, n.end, b.start, b.end));
+  });
+}
+function c45NailNoticeHtml(mixed){
+  return `<div class="nail-consult-box c45-nail-notice"><strong>美甲採諮詢預約制</strong><p>${mixed ? "您已同時選擇美甲與 SPA／臉部／身體服務。下方時段只代表 SPA／臉部／身體可預約時間；美甲正式時間會由店家再與您確認。" : "因美甲時間會依手部／足部、卸甲、單色或造型而不同，請送出希望日期與需求，店家會再與您確認正式時間。"}</p></div>`;
+}
+async function c45RenderSlots(){
+  const box = document.getElementById("slotList") || document.getElementById("slots") || document.querySelector(".slot-list");
+  const dateInput = document.getElementById("date") || document.getElementById("bookingDate");
+  if(!box || !dateInput) return false;
+
+  const hasNail = c45HasNail();
+  const hasSpa = c45HasSpa();
+
+  if(hasNail && !hasSpa){
+    box.innerHTML = c45NailNoticeHtml(false);
+    return true;
+  }
+
+  const date = dateInput.value;
+  if(!date) return false;
+
+  const {data, error} = await db.from("bookings").select("*").eq("date", date);
+  if(error){
+    console.error(error);
+    box.innerHTML = "<p>讀取時段失敗，請稍後再試。</p>";
+    return true;
+  }
+
+  const times = ["10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"];
+  const slotsHtml = times.map(t => {
+    const ok = c45IsAvailable(data || [], t);
+    return `<button type="button" class="slot-btn ${ok ? "" : "disabled"}" data-time="${t}" ${ok ? "" : "disabled"}>${t}${ok ? "" : " 已滿"}</button>`;
+  }).join("");
+
+  box.innerHTML = (hasNail ? c45NailNoticeHtml(true) : "") + `<div class="slot-grid">${slotsHtml}</div>`;
+  return true;
+}
+window.renderSlots = c45RenderSlots;
+
+document.addEventListener("click", function(e){
+  const btn = e.target.closest(".slot-btn,.slot-button");
+  if(!btn) return;
+  if(btn.disabled || btn.classList.contains("disabled")) return;
+  const time = btn.dataset.time || (btn.textContent.match(/\d{1,2}:\d{2}/)||[])[0];
+  if(!time) return;
+  e.preventDefault();
+  window.selectedSlot = time;
+  try{ selectedSlot = time; }catch(err){}
+  document.querySelectorAll(".slot-btn,.slot-button").forEach(b => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  const hidden = document.getElementById("selectedSlot") || document.querySelector('input[name="slot"]');
+  if(hidden) hidden.value = time;
+  const contactCard = document.getElementById("contactCard") || document.getElementById("customerCard") || document.getElementById("bookingForm") || document.querySelector(".contact-card");
+  if(contactCard){
+    contactCard.classList.remove("hidden");
+    contactCard.scrollIntoView({behavior:"smooth", block:"start"});
+  }
+}, true);
+
+document.addEventListener("change", () => setTimeout(() => { if(typeof renderSlots === "function") renderSlots(); }, 150));
+document.addEventListener("click", () => setTimeout(() => { if(typeof renderSlots === "function") renderSlots(); }, 180));
