@@ -1231,3 +1231,139 @@ document.addEventListener("click", e => {
 document.addEventListener("change", () => setTimeout(() => { if(typeof renderSlots === "function") renderSlots(); }, 150));
 document.addEventListener("click", () => setTimeout(() => { if(typeof renderSlots === "function") renderSlots(); }, 180));
 document.addEventListener("DOMContentLoaded", () => setTimeout(c46EnsureCustomFields, 500));
+
+
+/* CONSTONIC FRONT V4.7
+   休假同步 + 美甲混合預約修正
+*/
+window.CONSTONIC_FRONT_VERSION = "V4.7";
+
+function c47Cart(){try{if(Array.isArray(window.cart))return window.cart;if(typeof cart!=="undefined"&&Array.isArray(cart))return cart;}catch(e){}return [];}
+function c47IsNailItem(item){const text=[item?.name,item?.category,item?.therapist,item?.type].map(v=>String(v||"")).join(" ");return /美甲|指甲|卸甲|手部|足部|單色|造型|曼曼/.test(text);}
+function c47SpaItems(){return c47Cart().filter(i=>!c47IsNailItem(i));}
+function c47HasNail(){return c47Cart().some(c47IsNailItem);}
+function c47HasSpa(){return c47SpaItems().length>0;}
+function c47TimeToMin(t){const m=String(t||"").match(/^(\d{1,2}):(\d{2})$/);if(!m)return null;return Number(m[1])*60+Number(m[2]);}
+function c47NormalizeStaff(name){if(["雅潔老師","巧萱美容師","曼曼美甲師"].includes(name))return name;return "不指定";}
+function c47Overlap(aStart,aEnd,bStart,bEnd){return aStart<bEnd&&aEnd>bStart;}
+
+async function c47LoadBlocks(date){
+  try{
+    const {data,error}=await db.from("booking_blocks").select("*").eq("date",date);
+    if(error){console.warn("booking_blocks 讀取失敗",error);return [];}
+    return data||[];
+  }catch(e){console.warn("booking_blocks 尚未建立或讀取失敗",e);return [];}
+}
+function c47IsAllDayClosed(blocks){return (blocks||[]).some(b=>(b.therapist==="全店"||b.therapist==="全日"||b.therapist==="全店休")&&b.all_day!==false);}
+function c47StaffClosed(blocks,staff){return (blocks||[]).some(b=>b.therapist===staff&&b.all_day!==false);}
+
+function c47BookingSegments(bookings){
+  const segs=[];
+  (bookings||[]).forEach(b=>{
+    if(b.status==="cancelled")return;
+    const base=c47TimeToMin(b.slot);
+    if(base===null)return;
+    let offset=0;
+    (b.items||[]).forEach(item=>{
+      const duration=Number(item.duration||0);
+      if(duration<=0)return;
+      if(c47IsNailItem(item)){offset+=duration;return;}
+      segs.push({therapist:c47NormalizeStaff(item.therapist||b.therapist),start:base+offset,end:base+offset+duration});
+      offset+=duration;
+    });
+  });
+  return segs;
+}
+function c47NeedSegments(startMin){
+  const segs=[];let offset=0;
+  c47SpaItems().forEach(item=>{
+    const duration=Number(item.duration||0);
+    if(duration<=0)return;
+    let fallback="不指定";
+    try{fallback=selectedTherapist||"不指定";}catch(e){}
+    segs.push({therapist:c47NormalizeStaff(item.therapist||fallback),start:startMin+offset,end:startMin+offset+duration});
+    offset+=duration;
+  });
+  return segs;
+}
+function c47Available(bookings,blocks,time){
+  const start=c47TimeToMin(time);
+  if(start===null)return false;
+  if(c47IsAllDayClosed(blocks))return false;
+  const need=c47NeedSegments(start);
+  if(!need.length)return false;
+  const busy=c47BookingSegments(bookings);
+  return need.every(n=>{
+    if(n.therapist!=="不指定"&&c47StaffClosed(blocks,n.therapist))return false;
+    if(n.therapist==="不指定"){
+      const spaStaff=["雅潔老師","巧萱美容師"];
+      if(spaStaff.every(s=>c47StaffClosed(blocks,s)))return false;
+      return !busy.some(b=>c47Overlap(n.start,n.end,b.start,b.end));
+    }
+    return !busy.some(b=>b.therapist===n.therapist&&c47Overlap(n.start,n.end,b.start,b.end));
+  });
+}
+function c47NailNotice(mixed){
+  return `<div class="nail-consult-box c47-nail-notice"><strong>美甲採同日諮詢安排</strong><p>${mixed?"您已同時選擇美甲與 SPA／臉部／身體服務。下方時間是 SPA／臉部／身體可預約時間；美甲會由店家依當日狀況另外確認正式時間。":"美甲時間會依手部／足部、卸甲、單色或造型而不同，請填寫希望日期與需求，店家會再確認正式時間。"}</p></div>`;
+}
+function c47EnsureCustomFields(){
+  if(document.getElementById("c47CustomFields")||document.getElementById("c46CustomFields"))return;
+  const anchor=document.getElementById("cartCard")||document.querySelector(".cart-card")||document.querySelector("#bookingList")?.parentElement||document.querySelector("section.card");
+  if(!anchor)return;
+  const box=document.createElement("div");
+  box.id="c47CustomFields";box.className="card c46-custom-fields";
+  box.innerHTML=`<h2>其他需求補充</h2><div class="form-grid"><div class="field"><label>美甲其他需求</label><textarea id="customNailRequest" rows="3" placeholder="例如：貓眼、法式、造型、卸甲重做、特殊款式..."></textarea></div><div class="field"><label>臉部／身體其他療程需求</label><textarea id="customSpaRequest" rows="3" placeholder="例如：加強肩頸、腿部水腫、臉部保濕、指定未列出的療程..."></textarea></div></div>`;
+  anchor.insertAdjacentElement("afterend",box);
+}
+async function c47RenderSlots(){
+  const box=document.getElementById("slotList")||document.getElementById("slots")||document.querySelector(".slot-list");
+  const dateInput=document.getElementById("date")||document.getElementById("bookingDate");
+  if(!box||!dateInput)return false;
+  c47EnsureCustomFields();
+  const hasNail=c47HasNail(), hasSpa=c47HasSpa();
+  if(hasNail&&!hasSpa){box.innerHTML=c47NailNotice(false);return true;}
+  const date=dateInput.value;
+  if(!date)return false;
+  const [bookingRes,blocks]=await Promise.all([db.from("bookings").select("*").eq("date",date),c47LoadBlocks(date)]);
+  if(bookingRes.error){console.error(bookingRes.error);box.innerHTML="<p>讀取時段失敗，請稍後再試。</p>";return true;}
+  if(c47IsAllDayClosed(blocks)){
+    const reason=(blocks||[]).find(b=>b.therapist==="全店")?.reason||"店休";
+    box.innerHTML=`<div class="closed-day-message">本日全店不開放預約：${reason}</div>`;
+    return true;
+  }
+  const times=["10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"];
+  const slots=times.map(t=>{const ok=c47Available(bookingRes.data||[],blocks||[],t);return `<button type="button" class="slot-btn c47-slot ${ok?"":"disabled"}" data-time="${t}" ${ok?"":"disabled"}>${t}${ok?"":" 已滿"}</button>`;}).join("");
+  box.innerHTML=(hasNail?c47NailNotice(true):"")+`<div class="slot-grid c47-slot-grid">${slots}</div>`;
+  return true;
+}
+window.renderSlots=c47RenderSlots;
+function c47SelectSlot(time,btn){
+  window.selectedSlot=time;try{selectedSlot=time;}catch(e){}
+  document.querySelectorAll(".slot-btn,.slot-button").forEach(b=>b.classList.remove("selected"));
+  if(btn)btn.classList.add("selected");
+  const hidden=document.getElementById("selectedSlot")||document.querySelector('input[name="slot"]');
+  if(hidden)hidden.value=time;
+  const contactCard=document.getElementById("contactCard")||document.getElementById("customerCard")||document.getElementById("bookingForm")||document.querySelector(".contact-card");
+  if(contactCard){contactCard.classList.remove("hidden");contactCard.scrollIntoView({behavior:"smooth",block:"start"});}
+}
+window.selectSlot=function(time){c47SelectSlot(time);};
+document.addEventListener("click",function(e){
+  const btn=e.target.closest(".slot-btn,.slot-button");if(!btn)return;
+  if(btn.disabled||btn.classList.contains("disabled"))return;
+  const time=btn.dataset.time||(btn.textContent.match(/\d{1,2}:\d{2}/)||[])[0];
+  if(!time)return;e.preventDefault();c47SelectSlot(time,btn);
+},true);
+function c47AppendCustomNote(){
+  const nail=document.getElementById("customNailRequest")?.value?.trim();
+  const spa=document.getElementById("customSpaRequest")?.value?.trim();
+  if(!nail&&!spa)return;
+  const noteField=document.getElementById("note")||document.getElementById("bookingNote")||document.querySelector('textarea[name="note"]');
+  if(!noteField)return;
+  const extra=[nail?"美甲其他需求："+nail:"",spa?"臉部／身體其他需求："+spa:""].filter(Boolean).join("\\n");
+  if(noteField.value&&!noteField.value.includes(extra))noteField.value+="\\n"+extra;else if(!noteField.value)noteField.value=extra;
+}
+document.addEventListener("submit",c47AppendCustomNote,true);
+document.addEventListener("click",e=>{const btn=e.target.closest("button");if(btn&&/送出|預約|確認/.test(btn.textContent||""))c47AppendCustomNote();},true);
+document.addEventListener("change",()=>setTimeout(()=>{if(typeof renderSlots==="function")renderSlots();},150));
+document.addEventListener("click",()=>setTimeout(()=>{if(typeof renderSlots==="function")renderSlots();},180));
+document.addEventListener("DOMContentLoaded",()=>{setTimeout(c47EnsureCustomFields,500);setTimeout(()=>{if(typeof renderSlots==="function")renderSlots();},900);});

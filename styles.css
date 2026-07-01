@@ -156,3 +156,11 @@ button:disabled{
     font-size:18px !important;
   }
 }
+
+
+/* CONSTONIC V4.7 */
+.c47-nail-notice{margin-bottom:18px;}
+.c47-slot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:16px;}
+.c47-slot{min-height:64px !important;font-size:22px !important;font-weight:900 !important;border-radius:20px !important;}
+.c47-slot.selected{background:var(--green) !important;color:#fff !important;border-color:var(--gold) !important;box-shadow:0 12px 24px rgba(32,61,50,.22);}
+@media(max-width:640px){.c47-slot-grid{grid-template-columns:repeat(2,1fr);gap:12px}.c47-slot{min-height:58px !important;font-size:18px !important;}}
