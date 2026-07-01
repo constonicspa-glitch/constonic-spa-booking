@@ -1317,3 +1317,85 @@ document.addEventListener("DOMContentLoaded", () => {
     if(typeof renderBookings === "function") renderBookings();
   }, 1200);
 });
+
+
+/* CONSTONIC ADMIN V6.0 Beta
+   穩定後台：今日 / 本週 / 本月預約查詢、生日月份顯示
+*/
+window.CONSTONIC_ADMIN_VERSION = "V6.0 Beta";
+
+function c60DateISO(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+function c60StartOfWeek(d){const x=new Date(d);const day=x.getDay()||7;x.setDate(x.getDate()-day+1);return x;}
+function c60EndOfWeek(d){const x=c60StartOfWeek(d);x.setDate(x.getDate()+6);return x;}
+function c60StartOfMonth(d){return new Date(d.getFullYear(),d.getMonth(),1);}
+function c60EndOfMonth(d){return new Date(d.getFullYear(),d.getMonth()+1,0);}
+function c60ItemText(b){return (b.items||[]).map((i,idx)=>`${idx+1}. ${i.name||"-"}（${i.duration||0}分）`).join("、");}
+function c60Status(s){return ({pending:"待確認",confirmed:"已確認",completed:"已完成",cancelled:"已取消"}[s]||s||"待確認");}
+function c60StaffLabel(b){const names=Array.from(new Set((b.items||[]).map(i=>i.therapist||b.therapist).filter(Boolean)));return names.join("、")||b.therapist||"-";}
+async function c60FetchRange(start,end,staff){
+  const {data,error}=await db.from("bookings").select("*").gte("date",start).lte("date",end).order("date",{ascending:true}).order("slot",{ascending:true});
+  if(error){console.error(error);return[];}
+  let list=data||[];
+  if(staff&&staff!=="全部")list=list.filter(b=>b.therapist===staff||(b.items||[]).some(i=>i.therapist===staff));
+  return list.filter(b=>b.status!=="cancelled");
+}
+function c60InjectQueryPanel(){
+  if(document.getElementById("c60QueryPanel"))return;
+  const main=document.getElementById("adminMain")||document.querySelector("main")||document.body;
+  const card=document.createElement("section");
+  card.id="c60QueryPanel"; card.className="card c60-query-panel";
+  card.innerHTML=`<h2>預約查詢</h2><p class="hint">依今天、本週、本月查看客戶預約資料。</p><div class="c60-query-actions"><select id="c60QueryStaff"><option value="全部">全部美容師</option></select><button type="button" onclick="c60LoadQuery('today')">今天</button><button type="button" onclick="c60LoadQuery('week')">本週</button><button type="button" onclick="c60LoadQuery('month')">本月</button></div><div id="c60QueryResult" class="c60-query-result"></div>`;
+  const cal=document.getElementById("calendarView")?.closest(".card")||main.firstElementChild;
+  if(cal)cal.insertAdjacentElement("beforebegin",card);else main.prepend(card);
+  c60PopulateStaffSelect();
+}
+async function c60PopulateStaffSelect(){
+  const sel=document.getElementById("c60QueryStaff"); if(!sel)return;
+  let staff=["雅潔老師","巧萱美容師"];
+  try{
+    const {data}=await db.from("staff_members").select("*").eq("active",true).order("sort_order",{ascending:true});
+    const names=(data||[]).filter(s=>s.type!=="美甲"&&!/美甲|曼曼/.test(s.name)).map(s=>s.name);
+    if(names.length)staff=names;
+  }catch(e){}
+  sel.innerHTML=`<option value="全部">全部美容師</option>`+staff.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+}
+window.c60LoadQuery=async function(mode){
+  const box=document.getElementById("c60QueryResult"); if(!box)return;
+  const staff=document.getElementById("c60QueryStaff")?.value||"全部";
+  const now=new Date(); let start,end,title;
+  if(mode==="today"){start=end=c60DateISO(now);title="今日預約";}
+  else if(mode==="week"){start=c60DateISO(c60StartOfWeek(now));end=c60DateISO(c60EndOfWeek(now));title="本週預約";}
+  else{start=c60DateISO(c60StartOfMonth(now));end=c60DateISO(c60EndOfMonth(now));title="本月預約";}
+  box.innerHTML="讀取中...";
+  const list=await c60FetchRange(start,end,staff);
+  const groups={}; list.forEach(b=>{groups[b.date]=groups[b.date]||[];groups[b.date].push(b);});
+  let html=`<div class="c60-query-summary"><strong>${title}</strong><span>${start}${start!==end?" ～ "+end:""}</span><b>共 ${list.length} 筆</b></div>`;
+  if(!list.length)html+=`<p class="muted">目前沒有預約。</p>`;
+  else Object.keys(groups).sort().forEach(date=>{
+    html+=`<h3 class="c60-date-title">${date}</h3>`;
+    html+=groups[date].map(b=>`<div class="c60-booking-row" onclick="openBookingModal('${escapeHtml(b.id)}')"><div class="c60-time">${escapeHtml(b.slot||"-")}</div><div class="c60-client"><strong>${escapeHtml(b.customer_name||"-")}</strong><span>${escapeHtml(b.phone||"-")}</span></div><div class="c60-items">${escapeHtml(c60ItemText(b))}</div><div class="c60-staff">${escapeHtml(c60StaffLabel(b))}</div><div class="c60-status">${escapeHtml(c60Status(b.status))}</div></div>`).join("");
+  });
+  box.innerHTML=html;
+};
+function c60PatchBookingModalBirthday(){
+  const oldOpen=window.openBookingModal;
+  if(typeof oldOpen==="function"&&!oldOpen.c60Patched){
+    const patched=async function(id){
+      await oldOpen.apply(this,arguments);
+      setTimeout(()=>{
+        const modal=document.querySelector(".modal-card,.booking-modal,.modal-content");
+        if(!modal||modal.querySelector(".c60-birthday-view"))return;
+        const booking=(window.currentBookings||[]).find(b=>b.id===id);
+        const birthday=booking?.birthday_month||"-";
+        const area=modal.querySelector(".detail-grid,.booking-detail,.modal-body")||modal;
+        const div=document.createElement("div");
+        div.className="info-box c60-birthday-view";
+        div.innerHTML=`<strong>生日月份</strong><br>${escapeHtml(birthday)}`;
+        area.appendChild(div);
+      },300);
+    };
+    patched.c60Patched=true; window.openBookingModal=patched;
+  }
+}
+document.addEventListener("DOMContentLoaded",()=>{setTimeout(c60InjectQueryPanel,900);setTimeout(c60PatchBookingModalBirthday,1000);});
+document.addEventListener("click",()=>setTimeout(c60PatchBookingModalBirthday,200));

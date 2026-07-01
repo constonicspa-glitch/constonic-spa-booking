@@ -1669,3 +1669,73 @@ document.addEventListener("click", async () => {
     c51RenderStaffSelectors(staff);
   }, 300);
 });
+
+
+/* CONSTONIC FRONT V6.0 Beta
+   穩定前台：移除 LINE、生日月份、2個月限制、簡潔品牌感
+*/
+window.CONSTONIC_FRONT_VERSION = "V6.0 Beta";
+
+function c60RemoveLineField(){
+  document.querySelectorAll("input,textarea").forEach(el=>{
+    const label=el.closest(".field")?.querySelector("label")?.textContent||"";
+    const ph=el.getAttribute("placeholder")||"";
+    const name=el.getAttribute("name")||"";
+    const id=el.id||"";
+    if(/LINE|Line|line/.test(label+ph+name+id)){
+      (el.closest(".field")||el.parentElement)?.remove();
+    }
+  });
+}
+function c60EnsureBirthdayMonth(){
+  if(document.getElementById("birthdayMonth")) return;
+  const phone=document.querySelector("#phone,input[name='phone'],input[type='tel']");
+  const anchor=phone?.closest(".field")||phone?.parentElement;
+  if(!anchor) return;
+  const field=document.createElement("div");
+  field.className="field";
+  field.innerHTML=`<label>生日月份</label><select id="birthdayMonth" name="birthday_month"><option value="">可不填</option>${Array.from({length:12},(_,i)=>`<option value="${i+1}月">${i+1}月</option>`).join("")}</select>`;
+  anchor.insertAdjacentElement("afterend",field);
+}
+function c60SetDateLimit(){
+  const input=document.getElementById("date")||document.getElementById("bookingDate");
+  if(!input)return;
+  const today=new Date(), max=new Date();
+  max.setMonth(max.getMonth()+2);
+  const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  input.min=iso(today); input.max=iso(max);
+  if(!input.value||input.value<input.min)input.value=input.min;
+  if(input.value>input.max)input.value=input.max;
+}
+function c60BrandHeader(){
+  if(document.querySelector(".c60-brand-note"))return;
+  const hero=document.querySelector("header,.hero,.brand-header");
+  if(!hero)return;
+  const note=document.createElement("div");
+  note.className="c60-brand-note";
+  note.innerHTML=`<strong>康姿多儷 Spa</strong><span>CONSTONIC Beauty Center</span>`;
+  hero.prepend(note);
+}
+function c60PatchSubmitBirthday(){
+  const oldSubmit=window.submitBooking;
+  if(typeof oldSubmit==="function"&&!oldSubmit.c60Patched){
+    const patched=async function(){
+      const birthday=document.getElementById("birthdayMonth")?.value||"";
+      const result=await oldSubmit.apply(this,arguments);
+      try{
+        if(birthday&&window.lastBookingId){
+          await db.from("bookings").update({birthday_month:birthday}).eq("id",window.lastBookingId);
+        }
+      }catch(e){console.warn("生日月份補寫失敗，不影響預約",e);}
+      return result;
+    };
+    patched.c60Patched=true;
+    window.submitBooking=patched;
+  }
+}
+document.addEventListener("DOMContentLoaded",()=>{
+  c60RemoveLineField(); c60EnsureBirthdayMonth(); c60SetDateLimit(); c60BrandHeader(); c60PatchSubmitBirthday();
+  setTimeout(c60RemoveLineField,600); setTimeout(c60EnsureBirthdayMonth,700);
+});
+document.addEventListener("click",()=>setTimeout(()=>{c60RemoveLineField(); c60EnsureBirthdayMonth(); c60PatchSubmitBirthday();},150));
+document.addEventListener("change",()=>setTimeout(c60SetDateLimit,100));

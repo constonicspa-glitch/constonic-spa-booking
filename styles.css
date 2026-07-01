@@ -235,3 +235,123 @@ button:disabled{
 #c51StaffPanel{
   margin-top:24px;
 }
+
+
+/* CONSTONIC V6.0 Beta - 康姿多儷日系穩定版 */
+:root{
+  --constonic-cream:#fffaf0;
+  --constonic-card:#fffdf8;
+  --constonic-gold:#b8903c;
+  --constonic-green:#143c32;
+  --constonic-line:#ead8b6;
+  --constonic-brown:#5c4933;
+}
+body{
+  background:linear-gradient(180deg,#fffaf0 0%,#f7efdf 100%) !important;
+  color:var(--constonic-green) !important;
+}
+.card,.modal-card,.panel,section{
+  border-color:rgba(184,144,60,.28) !important;
+  box-shadow:0 18px 44px rgba(92,73,51,.08) !important;
+}
+button,.primary{
+  border-radius:18px !important;
+  font-weight:800 !important;
+}
+.c60-brand-note{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  margin-bottom:12px;
+  color:var(--constonic-gold);
+  letter-spacing:.08em;
+}
+.c60-brand-note strong{
+  font-size:26px;
+  color:var(--constonic-green);
+}
+.c60-brand-note span{
+  font-size:15px;
+  color:var(--constonic-gold);
+}
+.c60-query-panel{
+  margin-bottom:24px;
+}
+.c60-query-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+}
+.c60-query-actions select,
+.c60-query-actions button{
+  min-height:48px;
+  padding:10px 16px;
+}
+.c60-query-summary{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  align-items:center;
+  margin:16px 0;
+  padding:14px 16px;
+  border-radius:18px;
+  background:#fff7e6;
+  color:var(--constonic-green);
+}
+.c60-query-summary strong{
+  font-size:22px;
+}
+.c60-date-title{
+  margin:20px 0 10px;
+  color:var(--constonic-gold);
+}
+.c60-booking-row{
+  display:grid;
+  grid-template-columns:82px 1.1fr 2fr 1fr 88px;
+  gap:12px;
+  align-items:center;
+  padding:14px 16px;
+  border:1px solid rgba(184,144,60,.25);
+  border-radius:18px;
+  background:var(--constonic-card);
+  margin-bottom:10px;
+  cursor:pointer;
+}
+.c60-booking-row:hover{
+  border-color:var(--constonic-gold);
+  transform:translateY(-1px);
+}
+.c60-time{
+  font-weight:900;
+  color:var(--constonic-gold);
+}
+.c60-client strong{
+  display:block;
+  font-size:18px;
+}
+.c60-client span{
+  color:var(--constonic-brown);
+}
+.c60-items{
+  color:var(--constonic-brown);
+}
+.c60-status{
+  font-weight:800;
+}
+.c60-birthday-view{
+  margin-top:10px;
+}
+@media(max-width:760px){
+  .c60-booking-row{
+    grid-template-columns:1fr;
+    gap:6px;
+  }
+  .c60-query-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+  }
+  .c60-query-actions select{
+    grid-column:1/-1;
+  }
+}
