@@ -1367,3 +1367,193 @@ document.addEventListener("click",e=>{const btn=e.target.closest("button");if(bt
 document.addEventListener("change",()=>setTimeout(()=>{if(typeof renderSlots==="function")renderSlots();},150));
 document.addEventListener("click",()=>setTimeout(()=>{if(typeof renderSlots==="function")renderSlots();},180));
 document.addEventListener("DOMContentLoaded",()=>{setTimeout(c47EnsureCustomFields,500);setTimeout(()=>{if(typeof renderSlots==="function")renderSlots();},900);});
+
+
+/* CONSTONIC FRONT V4.8
+   修正：
+   1. 美甲 + SPA/臉部/身體混合預約仍顯示 SPA 可選時間
+   2. 時間按鈕選取後深色提示
+   3. 預約日期僅開放今天起往後 2 個月
+*/
+window.CONSTONIC_FRONT_VERSION = "V4.8";
+
+function c48TodayISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function c48MaxISO(){
+  const d = new Date();
+  d.setMonth(d.getMonth()+2);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function c48NormalizeDate(v){
+  return String(v||"").replaceAll("/","-");
+}
+function c48SetDateLimit(){
+  const input = document.getElementById("date") || document.getElementById("bookingDate");
+  if(!input) return;
+  input.min = c48TodayISO();
+  input.max = c48MaxISO();
+  const val = c48NormalizeDate(input.value);
+  if(!val || val < input.min) input.value = input.min;
+  if(val > input.max) input.value = input.max;
+}
+function c48Cart(){
+  try{
+    if(Array.isArray(window.cart)) return window.cart;
+    if(typeof cart !== "undefined" && Array.isArray(cart)) return cart;
+  }catch(e){}
+  return [];
+}
+function c48IsNail(item){
+  const text = [item?.name,item?.category,item?.therapist,item?.type].map(v=>String(v||"")).join(" ");
+  return /美甲|指甲|卸甲|手部|足部|單色|造型|曼曼/.test(text);
+}
+function c48SpaItems(){
+  return c48Cart().filter(i=>!c48IsNail(i));
+}
+function c48HasNail(){ return c48Cart().some(c48IsNail); }
+function c48HasSpa(){ return c48SpaItems().length > 0; }
+function c48TimeToMin(t){
+  const m = String(t||"").match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return Number(m[1])*60 + Number(m[2]);
+}
+function c48Staff(s){
+  if(["雅潔老師","巧萱美容師","曼曼美甲師"].includes(s)) return s;
+  return "不指定";
+}
+function c48Overlap(a,b,c,d){ return a<d && b>c; }
+
+async function c48Blocks(date){
+  try{
+    const {data,error}=await db.from("booking_blocks").select("*").eq("date",date);
+    if(error) return [];
+    return data||[];
+  }catch(e){ return []; }
+}
+function c48AllClosed(blocks){
+  return (blocks||[]).some(b=>(b.therapist==="全店"||b.therapist==="全店休")&&b.all_day!==false);
+}
+function c48StaffClosed(blocks, staff){
+  return (blocks||[]).some(b=>b.therapist===staff&&b.all_day!==false);
+}
+function c48BusySegments(bookings){
+  const segs=[];
+  (bookings||[]).forEach(b=>{
+    if(b.status==="cancelled") return;
+    const base=c48TimeToMin(b.slot);
+    if(base===null) return;
+    let offset=0;
+    const items=Array.isArray(b.items)?b.items:[];
+    items.forEach(item=>{
+      const dur=Number(item.duration||0);
+      if(dur<=0) return;
+      if(c48IsNail(item)){
+        offset += dur;
+        return;
+      }
+      segs.push({staff:c48Staff(item.therapist||b.therapist),start:base+offset,end:base+offset+dur});
+      offset += dur;
+    });
+  });
+  return segs;
+}
+function c48NeedSegments(start){
+  let offset=0;
+  return c48SpaItems().map(item=>{
+    const dur=Number(item.duration||0);
+    let fallback="不指定";
+    try{ fallback=selectedTherapist||"不指定"; }catch(e){}
+    const seg={staff:c48Staff(item.therapist||fallback),start:start+offset,end:start+offset+dur};
+    offset+=dur;
+    return seg;
+  }).filter(s=>s.end>s.start);
+}
+function c48Available(bookings, blocks, time){
+  const start=c48TimeToMin(time);
+  if(start===null) return false;
+  if(c48AllClosed(blocks)) return false;
+  const need=c48NeedSegments(start);
+  if(!need.length) return false;
+  const busy=c48BusySegments(bookings);
+  return need.every(n=>{
+    if(n.staff!=="不指定" && c48StaffClosed(blocks,n.staff)) return false;
+    if(n.staff==="不指定"){
+      const spaStaff=["雅潔老師","巧萱美容師"];
+      if(spaStaff.every(s=>c48StaffClosed(blocks,s))) return false;
+      return !busy.some(b=>c48Overlap(n.start,n.end,b.start,b.end));
+    }
+    return !busy.some(b=>b.staff===n.staff && c48Overlap(n.start,n.end,b.start,b.end));
+  });
+}
+function c48Notice(mixed){
+  return `<div class="nail-consult-box c48-nail-notice"><strong>美甲採同日諮詢安排</strong><p>${mixed ? "下方時間為 SPA／臉部／身體可預約時間；美甲時間會由店家另外確認。" : "美甲採諮詢預約制，請填寫希望時段與需求，店家會再確認正式時間。"}</p></div>`;
+}
+async function c48RenderSlots(){
+  c48SetDateLimit();
+  const box=document.getElementById("slotList")||document.getElementById("slots")||document.querySelector(".slot-list");
+  const dateInput=document.getElementById("date")||document.getElementById("bookingDate");
+  if(!box||!dateInput) return false;
+
+  const date=c48NormalizeDate(dateInput.value);
+  if(date<dateInput.min || date>dateInput.max){
+    box.innerHTML=`<div class="closed-day-message">目前僅開放今天起往後 2 個月內預約。</div>`;
+    return true;
+  }
+
+  const hasNail=c48HasNail();
+  const hasSpa=c48HasSpa();
+
+  if(hasNail && !hasSpa){
+    box.innerHTML=c48Notice(false);
+    return true;
+  }
+
+  const [bookingRes, blocks]=await Promise.all([
+    db.from("bookings").select("*").eq("date",date),
+    c48Blocks(date)
+  ]);
+  if(bookingRes.error){
+    box.innerHTML="<p>讀取時段失敗，請稍後再試。</p>";
+    console.error(bookingRes.error);
+    return true;
+  }
+  if(c48AllClosed(blocks)){
+    box.innerHTML=`<div class="closed-day-message">本日全店不開放預約。</div>`;
+    return true;
+  }
+
+  const times=["10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"];
+  const html=times.map(t=>{
+    const ok=c48Available(bookingRes.data||[],blocks||[],t);
+    return `<button type="button" class="slot-btn c48-slot ${ok?"":"disabled"}" data-time="${t}" ${ok?"":"disabled"}>${t}${ok?"":" 已滿"}</button>`;
+  }).join("");
+  box.innerHTML=(hasNail?c48Notice(true):"")+`<div class="slot-grid c48-slot-grid">${html}</div>`;
+  return true;
+}
+window.renderSlots=c48RenderSlots;
+
+function c48Select(time, btn){
+  window.selectedSlot=time;
+  try{ selectedSlot=time; }catch(e){}
+  document.querySelectorAll(".slot-btn,.slot-button").forEach(b=>b.classList.remove("selected","is-selected"));
+  if(btn) btn.classList.add("selected","is-selected");
+  const hidden=document.getElementById("selectedSlot")||document.querySelector('input[name="slot"]');
+  if(hidden) hidden.value=time;
+  const contact=document.getElementById("contactCard")||document.getElementById("customerCard")||document.getElementById("bookingForm")||document.querySelector(".contact-card");
+  if(contact){contact.classList.remove("hidden");contact.scrollIntoView({behavior:"smooth",block:"start"});}
+}
+window.selectSlot=function(time){c48Select(time);};
+document.addEventListener("click",e=>{
+  const btn=e.target.closest(".slot-btn,.slot-button");
+  if(!btn || btn.disabled || btn.classList.contains("disabled")) return;
+  const time=btn.dataset.time||(btn.textContent.match(/\d{1,2}:\d{2}/)||[])[0];
+  if(!time) return;
+  e.preventDefault();
+  c48Select(time,btn);
+},true);
+
+document.addEventListener("DOMContentLoaded",()=>{c48SetDateLimit();setTimeout(()=>{if(typeof renderSlots==="function")renderSlots();},800);});
+document.addEventListener("change",e=>{if(e.target) setTimeout(()=>{if(typeof renderSlots==="function")renderSlots();},150);});
+document.addEventListener("click",()=>setTimeout(()=>{if(typeof renderSlots==="function")renderSlots();},180));
