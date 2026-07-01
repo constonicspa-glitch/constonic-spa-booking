@@ -1399,3 +1399,319 @@ function c60PatchBookingModalBirthday(){
 }
 document.addEventListener("DOMContentLoaded",()=>{setTimeout(c60InjectQueryPanel,900);setTimeout(c60PatchBookingModalBirthday,1000);});
 document.addEventListener("click",()=>setTimeout(c60PatchBookingModalBirthday,200));
+
+
+/* CONSTONIC ADMIN V6.0 RC1
+   後台正式整合：
+   - 只保留 Supabase 人員管理
+   - 新增療程管理，前台同步
+   - 技術服務薪資方式：30% / 40% / 固定薪資
+   - 取消平台固定欄位
+   - 本次實收自動加總：技術金額 + 商品 + 新課程 + 新儲值
+   - 預約開放區間設定
+*/
+window.CONSTONIC_ADMIN_VERSION = "V6.0 RC1";
+
+function c60Money(n){ return Number(n || 0).toLocaleString("zh-TW"); }
+
+window.defaultCheckout = function(b){
+  const c = b.checkout || {};
+  return {
+    room: c.room || "未指定",
+    payment_status: c.payment_status || "未收款",
+    payment_method: c.payment_method || "現金",
+    tech_rows: c.tech_rows || (b.items || []).map((i, idx) => ({
+      item_name:i.name || `技術${idx+1}`,
+      amount:Number(i.price || 0),
+      rate:i.salary_type || "30",
+      fixed_salary:Number(i.fixed_salary || 0)
+    })),
+    product_amount: Number(c.product_amount || 0),
+    course_amount: Number(c.course_amount || 0),
+    stored_value_new_amount: Number(c.stored_value_new_amount || 0),
+    total_received: Number(c.total_received || 0),
+    invoice_status: c.invoice_status || "未開",
+    receipt_note: c.receipt_note || ""
+  };
+};
+
+window.checkoutTotals = function(c){
+  let tech30Bonus = 0, tech40Bonus = 0, fixedBonus = 0, techReceived = 0;
+  (c.tech_rows || []).forEach(r => {
+    const amount = Number(r.amount || 0);
+    techReceived += amount;
+    if(String(r.rate) === "30") tech30Bonus += Math.round(amount * .3);
+    else if(String(r.rate) === "40") tech40Bonus += Math.round(amount * .4);
+    else if(String(r.rate) === "fixed") fixedBonus += Number(r.fixed_salary || amount || 0);
+  });
+  const product = Number(c.product_amount || 0);
+  const course = Number(c.course_amount || 0);
+  const stored = Number(c.stored_value_new_amount || 0);
+  const productBonus = Math.round(product * .1);
+  const courseBonus = Math.round((course + stored) * .02);
+  const totalReceived = techReceived + product + course + stored;
+  return {tech30Bonus, tech40Bonus, fixedBonus, productBonus, courseBonus, totalReceived, salaryTotal:tech30Bonus+tech40Bonus+fixedBonus+productBonus+courseBonus};
+};
+
+function c60RateOptions(rate){
+  return `<option value="30" ${String(rate)==="30"?"selected":""}>30%</option>
+    <option value="40" ${String(rate)==="40"?"selected":""}>40%</option>
+    <option value="fixed" ${String(rate)==="fixed"?"selected":""}>固定薪資</option>`;
+}
+
+window.renderCheckoutPanel = function(b){
+  const c = defaultCheckout(b);
+  const t = checkoutTotals(c);
+  const rows = c.tech_rows.map((r,idx)=>`
+    <div class="tech-row c60-tech-row">
+      <div class="field"><label>項目</label><input id="techName_${idx}" value="${escapeHtml(r.item_name || "")}"></div>
+      <div class="field"><label>技術金額</label><input id="techAmount_${idx}" type="number" min="0" value="${Number(r.amount || 0)}" oninput="c60RecalcCheckout()"></div>
+      <div class="field"><label>薪資方式</label><select id="techRate_${idx}" onchange="c60ToggleFixedSalary(${idx}); c60RecalcCheckout();">${c60RateOptions(r.rate)}</select></div>
+      <div class="field c60-fixed-field" id="fixedSalaryField_${idx}" style="${String(r.rate)==='fixed'?'':'display:none'}"><label>固定薪資</label><input id="fixedSalary_${idx}" type="number" min="0" value="${Number(r.fixed_salary || r.amount || 0)}" oninput="c60RecalcCheckout()"></div>
+    </div>`).join("");
+
+  return `<div class="panel cashier-panel"><h3>收銀／薪資</h3>
+    <div class="form-grid compact">
+      <div class="field"><label>收款狀態</label><select id="paymentStatus">${["已收款","部分收款","未收款"].map(v=>`<option ${c.payment_status===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label>收款方式</label><select id="paymentMethod">${PAYMENT_METHODS.map(v=>`<option ${c.payment_method===v?"selected":""}>${v}</option>`).join("")}</select></div>
+    </div>
+    <details open class="collapse"><summary>技術服務</summary><div id="techRows" data-count="${c.tech_rows.length}">${rows}</div></details>
+    <details open class="collapse"><summary>商品／課程／儲值</summary>
+      <div class="form-grid compact">
+        <div class="field"><label>商品銷售金額</label><input id="productAmount" type="number" min="0" value="${c.product_amount}" oninput="c60RecalcCheckout()"></div>
+        <div class="field"><label>新購課程金額</label><input id="courseAmount" type="number" min="0" value="${c.course_amount}" oninput="c60RecalcCheckout()"></div>
+        <div class="field"><label>新儲值金額</label><input id="storedValueAmount" type="number" min="0" value="${c.stored_value_new_amount}" oninput="c60RecalcCheckout()"></div>
+        <div class="field"><label>本次實收（自動加總）</label><input id="totalReceived" type="number" readonly value="${t.totalReceived}"></div>
+        <div class="field"><label>發票</label><select id="invoiceStatus">${["未開","已開","免開"].map(v=>`<option ${c.invoice_status===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      </div>
+      <div class="field"><label>備註</label><textarea id="receiptNote" rows="2">${escapeHtml(c.receipt_note)}</textarea></div>
+    </details>
+    <div class="salary-card" id="salaryCard">
+      <div><span>技術30%</span><strong id="salary30">NT$ ${c60Money(t.tech30Bonus)}</strong></div>
+      <div><span>技術40%</span><strong id="salary40">NT$ ${c60Money(t.tech40Bonus)}</strong></div>
+      <div><span>固定薪資</span><strong id="salaryFixed">NT$ ${c60Money(t.fixedBonus)}</strong></div>
+      <div><span>商品10%</span><strong id="salaryProduct">NT$ ${c60Money(t.productBonus)}</strong></div>
+      <div><span>課程／儲值2%</span><strong id="salaryCourse">NT$ ${c60Money(t.courseBonus)}</strong></div>
+      <div class="total"><span>本次薪資</span><strong id="salaryTotal">NT$ ${c60Money(t.salaryTotal)}</strong></div>
+    </div>
+  </div>`;
+};
+
+window.c60ToggleFixedSalary = function(idx){
+  const rate = $("techRate_"+idx)?.value;
+  const field = $("fixedSalaryField_"+idx);
+  if(field) field.style.display = rate === "fixed" ? "" : "none";
+};
+
+window.c60CollectCheckoutPreview = function(){
+  const rows = [...document.querySelectorAll("#techRows .tech-row")].map((row,idx)=>({
+    item_name:$("techName_"+idx)?.value || "",
+    amount:Number($("techAmount_"+idx)?.value || 0),
+    rate:$("techRate_"+idx)?.value || "30",
+    fixed_salary:Number($("fixedSalary_"+idx)?.value || 0)
+  }));
+  return {
+    tech_rows: rows,
+    product_amount:Number($("productAmount")?.value || 0),
+    course_amount:Number($("courseAmount")?.value || 0),
+    stored_value_new_amount:Number($("storedValueAmount")?.value || 0)
+  };
+};
+
+window.c60RecalcCheckout = function(){
+  const c = c60CollectCheckoutPreview();
+  const t = checkoutTotals(c);
+  if($("totalReceived")) $("totalReceived").value = t.totalReceived;
+  if($("salary30")) $("salary30").textContent = "NT$ " + c60Money(t.tech30Bonus);
+  if($("salary40")) $("salary40").textContent = "NT$ " + c60Money(t.tech40Bonus);
+  if($("salaryFixed")) $("salaryFixed").textContent = "NT$ " + c60Money(t.fixedBonus);
+  if($("salaryProduct")) $("salaryProduct").textContent = "NT$ " + c60Money(t.productBonus);
+  if($("salaryCourse")) $("salaryCourse").textContent = "NT$ " + c60Money(t.courseBonus);
+  if($("salaryTotal")) $("salaryTotal").textContent = "NT$ " + c60Money(t.salaryTotal);
+};
+
+window.collectCheckoutFromForm = function(existing={}){
+  const rows = [...document.querySelectorAll("#techRows .tech-row")].map((row,idx)=>({
+    item_name:$("techName_"+idx)?.value || "",
+    amount:Number($("techAmount_"+idx)?.value || 0),
+    rate:$("techRate_"+idx)?.value || "30",
+    fixed_salary:Number($("fixedSalary_"+idx)?.value || 0)
+  }));
+  const checkout = {
+    ...existing,
+    room:$("roomSelect")?.value || existing.room || "未指定",
+    payment_status:$("paymentStatus")?.value || "未收款",
+    payment_method:$("paymentMethod")?.value || "現金",
+    tech_rows:rows,
+    product_amount:Number($("productAmount")?.value || 0),
+    course_amount:Number($("courseAmount")?.value || 0),
+    stored_value_new_amount:Number($("storedValueAmount")?.value || 0),
+    total_received:Number($("totalReceived")?.value || 0),
+    invoice_status:$("invoiceStatus")?.value || "未開",
+    receipt_note:$("receiptNote")?.value || ""
+  };
+  checkout.calculated = checkoutTotals(checkout);
+  return checkout;
+};
+
+/* 療程管理 */
+async function c60LoadCategories(){
+  const {data,error} = await db.from("service_categories").select("*").order("sort_order",{ascending:true});
+  if(error){ console.error(error); return []; }
+  return (data || []).filter(c => !/美甲|曼曼/.test(c.name));
+}
+async function c60LoadItems(){
+  const {data,error} = await db.from("service_items").select("*").order("category_name",{ascending:true}).order("sort_order",{ascending:true});
+  if(error){ console.error(error); return []; }
+  return (data || []).filter(i => !/美甲|曼曼/.test(String(i.name+i.category_name)));
+}
+function c60InjectServicePanel(){
+  if(document.getElementById("c60ServicePanel")) return;
+  const main = document.getElementById("adminMain") || document.querySelector("main") || document.body;
+  const card = document.createElement("section");
+  card.id = "c60ServicePanel";
+  card.className = "card c60-service-panel";
+  card.innerHTML = `
+    <h2>療程管理</h2>
+    <p class="hint">這裡新增、修改、停用後，前台會同步顯示。美甲暫不放入預約系統。</p>
+    <div class="form-grid compact">
+      <div class="field"><label>類別名稱</label><input id="newCategoryName" placeholder="例如：臉部保養"></div>
+      <div class="field"><label>排序</label><input id="newCategorySort" type="number" value="100"></div>
+    </div>
+    <button type="button" onclick="c60AddCategory()">＋新增類別</button>
+    <hr>
+    <div class="form-grid compact">
+      <div class="field"><label>療程類別</label><select id="serviceCategorySelect"></select></div>
+      <div class="field"><label>療程名稱</label><input id="serviceName" placeholder="例如：眼部護膚"></div>
+      <div class="field"><label>時間（分鐘）</label><input id="serviceDuration" type="number" value="60"></div>
+      <div class="field"><label>價格</label><input id="servicePrice" type="number" value="0"></div>
+      <div class="field"><label>預設人員</label><select id="serviceDefaultStaff"></select></div>
+      <div class="field"><label>薪資方式</label><select id="serviceSalaryType" onchange="c60ToggleServiceFixed()"><option value="30">30%</option><option value="40">40%</option><option value="fixed">固定薪資</option></select></div>
+      <div class="field" id="serviceFixedSalaryField" style="display:none"><label>固定薪資</label><input id="serviceFixedSalary" type="number" value="0"></div>
+    </div>
+    <button type="button" class="primary" onclick="c60SaveServiceItem()">＋新增療程</button>
+    <div id="c60ServiceList" class="c60-service-list"></div>
+  `;
+  main.appendChild(card);
+  c60RefreshServicePanel();
+}
+window.c60ToggleServiceFixed = function(){
+  const field = $("serviceFixedSalaryField");
+  if(field) field.style.display = $("serviceSalaryType")?.value === "fixed" ? "" : "none";
+};
+async function c60RefreshServicePanel(){
+  const cats = await c60LoadCategories();
+  const staff = await c60LoadStaffForService();
+  const catSel = $("serviceCategorySelect");
+  if(catSel) catSel.innerHTML = cats.map(c => `<option value="${c.id}" data-name="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
+  const staffSel = $("serviceDefaultStaff");
+  if(staffSel) staffSel.innerHTML = staff.map(s => `<option>${escapeHtml(s.name)}</option>`).join("");
+  const list = await c60LoadItems();
+  const box = $("c60ServiceList");
+  if(box){
+    box.innerHTML = list.map(i => `
+      <div class="c60-service-row">
+        <div><strong>${escapeHtml(i.name)}</strong><span>${escapeHtml(i.category_name)}｜${Number(i.duration)}分｜NT$ ${c60Money(i.price)}｜${i.salary_type==="fixed"?"固定薪資 NT$ "+c60Money(i.fixed_salary):i.salary_type+"%"}</span></div>
+        <div>
+          <button type="button" onclick="c60ToggleServiceItem('${i.id}', ${i.active === false ? "true" : "false"})">${i.active === false ? "啟用" : "停用"}</button>
+          <button type="button" onclick="c60DeleteServiceItem('${i.id}')">刪除</button>
+        </div>
+      </div>`).join("");
+  }
+}
+async function c60LoadStaffForService(){
+  try{
+    const {data} = await db.from("staff_members").select("*").eq("active",true).order("sort_order",{ascending:true});
+    const list = (data || []).filter(s => s.type !== "美甲" && !/美甲|曼曼/.test(s.name));
+    return list.length ? list : [{name:"雅潔老師"},{name:"巧萱美容師"}];
+  }catch(e){ return [{name:"雅潔老師"},{name:"巧萱美容師"}]; }
+}
+window.c60AddCategory = async function(){
+  const name = $("newCategoryName")?.value?.trim();
+  if(!name){ alert("請輸入類別名稱"); return; }
+  if(/美甲|曼曼/.test(name)){ alert("美甲暫不放入預約系統"); return; }
+  const {error} = await db.from("service_categories").insert({name, active:true, sort_order:Number($("newCategorySort")?.value || 100)});
+  if(error){ alert("新增類別失敗，請確認已執行 V6.0 RC1 SQL"); console.error(error); return; }
+  $("newCategoryName").value = "";
+  await c60RefreshServicePanel();
+};
+window.c60SaveServiceItem = async function(){
+  const sel = $("serviceCategorySelect");
+  const category_id = sel?.value;
+  const category_name = sel?.selectedOptions?.[0]?.dataset?.name || sel?.selectedOptions?.[0]?.textContent || "";
+  const name = $("serviceName")?.value?.trim();
+  if(!category_id || !name){ alert("請選擇類別並輸入療程名稱"); return; }
+  const payload = {
+    category_id,
+    category_name,
+    name,
+    duration:Number($("serviceDuration")?.value || 60),
+    price:Number($("servicePrice")?.value || 0),
+    active:true,
+    default_staff:$("serviceDefaultStaff")?.value || "",
+    salary_type:$("serviceSalaryType")?.value || "30",
+    fixed_salary:Number($("serviceFixedSalary")?.value || 0),
+    sort_order:100
+  };
+  const {error} = await db.from("service_items").insert(payload);
+  if(error){ alert("新增療程失敗"); console.error(error); return; }
+  $("serviceName").value = "";
+  await c60RefreshServicePanel();
+};
+window.c60ToggleServiceItem = async function(id, active){
+  const {error} = await db.from("service_items").update({active}).eq("id",id);
+  if(error){ alert("更新失敗"); console.error(error); return; }
+  await c60RefreshServicePanel();
+};
+window.c60DeleteServiceItem = async function(id){
+  if(!confirm("確定刪除此療程？已成立的舊預約不會消失。")) return;
+  const {error} = await db.from("service_items").delete().eq("id",id);
+  if(error){ alert("刪除失敗"); console.error(error); return; }
+  await c60RefreshServicePanel();
+};
+
+/* 預約開放設定 */
+function c60InjectBookingSettings(){
+  if(document.getElementById("c60BookingSettings")) return;
+  const main = document.getElementById("adminMain") || document.querySelector("main") || document.body;
+  const card = document.createElement("section");
+  card.id = "c60BookingSettings";
+  card.className = "card";
+  card.innerHTML = `
+    <h2>預約開放設定</h2>
+    <div class="form-grid compact">
+      <div class="field"><label>開放方式</label><select id="bookingOpenMode" onchange="c60ToggleManualRange()"><option value="auto_2_months">自動開放未來 2 個月</option><option value="manual_range">手動指定日期區間</option></select></div>
+      <div class="field c60-manual-range"><label>開始日期</label><input id="manualStart" type="date"></div>
+      <div class="field c60-manual-range"><label>結束日期</label><input id="manualEnd" type="date"></div>
+    </div>
+    <button type="button" onclick="c60SaveBookingSettings()">儲存預約開放設定</button>
+  `;
+  main.appendChild(card);
+  c60LoadBookingSettings();
+}
+window.c60ToggleManualRange = function(){
+  const mode = $("bookingOpenMode")?.value;
+  document.querySelectorAll(".c60-manual-range").forEach(el => el.style.display = mode === "manual_range" ? "" : "none");
+};
+async function c60LoadBookingSettings(){
+  try{
+    const {data} = await db.from("booking_settings").select("*").eq("id",1).single();
+    if(data){
+      $("bookingOpenMode").value = data.booking_open_mode || "auto_2_months";
+      $("manualStart").value = data.manual_start || "";
+      $("manualEnd").value = data.manual_end || "";
+    }
+  }catch(e){}
+  c60ToggleManualRange();
+}
+window.c60SaveBookingSettings = async function(){
+  const payload = {id:1, booking_open_mode:$("bookingOpenMode")?.value || "auto_2_months", manual_start:$("manualStart")?.value || null, manual_end:$("manualEnd")?.value || null, updated_at:new Date().toISOString()};
+  const {error} = await db.from("booking_settings").upsert(payload);
+  if(error){ alert("儲存失敗，請確認已執行 V6.0 RC1 SQL"); console.error(error); return; }
+  alert("預約開放設定已儲存，前台重新整理後同步。");
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(c60InjectServicePanel, 1200);
+  setTimeout(c60InjectBookingSettings, 1400);
+});

@@ -1739,3 +1739,185 @@ document.addEventListener("DOMContentLoaded",()=>{
 });
 document.addEventListener("click",()=>setTimeout(()=>{c60RemoveLineField(); c60EnsureBirthdayMonth(); c60PatchSubmitBirthday();},150));
 document.addEventListener("change",()=>setTimeout(c60SetDateLimit,100));
+
+
+/* CONSTONIC FRONT V6.0 RC1
+   前台正式連動：
+   - 療程類別／療程項目改讀 Supabase
+   - 後台新增、修改、停用後，前台同步
+   - 移除 LINE 欄位但保留隱藏 input，避免舊送出邏輯錯誤
+   - 生日月份欄位
+   - 預約區間讀後台設定
+*/
+window.CONSTONIC_FRONT_VERSION = "V6.0 RC1";
+
+window.c60ServiceCategories = [];
+window.c60ServiceItems = [];
+window.c60StaffMembers = [];
+
+function c60Money(n){ return Number(n || 0).toLocaleString("zh-TW"); }
+
+async function c60LoadFrontStaff(){
+  try{
+    const {data,error} = await db.from("staff_members").select("*").eq("active", true).order("sort_order",{ascending:true});
+    if(error) throw error;
+    window.c60StaffMembers = (data || []).filter(s => s.type !== "美甲" && !/美甲|曼曼/.test(String(s.name||"")));
+  }catch(e){
+    window.c60StaffMembers = [{name:"雅潔老師"},{name:"巧萱美容師"}];
+  }
+  return window.c60StaffMembers;
+}
+
+async function c60LoadFrontServices(){
+  if(!dbReady) return false;
+  try{
+    const [catRes,itemRes] = await Promise.all([
+      db.from("service_categories").select("*").eq("active",true).order("sort_order",{ascending:true}),
+      db.from("service_items").select("*").eq("active",true).order("sort_order",{ascending:true})
+    ]);
+    if(catRes.error || itemRes.error) throw (catRes.error || itemRes.error);
+    window.c60ServiceCategories = (catRes.data || []).filter(c => !/美甲|曼曼/.test(String(c.name||"")));
+    window.c60ServiceItems = (itemRes.data || []).filter(i => !/美甲|曼曼/.test(String(i.name+i.category_name)));
+    return window.c60ServiceCategories.length > 0;
+  }catch(e){
+    console.warn("讀取療程管理失敗，使用原本內建療程", e);
+    return false;
+  }
+}
+
+window.renderCategories = function(){
+  const box = $("categoryButtons");
+  if(!box) return;
+  box.innerHTML = "";
+  const cats = window.c60ServiceCategories.length ? window.c60ServiceCategories.map(c => c.name) : Object.keys(services).filter(c => !/美甲|曼曼/.test(c));
+  cats.forEach(cat => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = cat;
+    btn.onclick = () => selectCategory(cat);
+    box.appendChild(btn);
+  });
+};
+
+window.selectCategory = function(cat){
+  const categoryButtons = $("categoryButtons");
+  if(categoryButtons){
+    [...categoryButtons.children].forEach(b => b.classList.toggle("active", b.textContent === cat));
+  }
+  const box = $("serviceList");
+  if(!box) return;
+  box.innerHTML = "";
+  box.className = "service-list";
+
+  let list = [];
+  if(window.c60ServiceItems.length){
+    list = window.c60ServiceItems.filter(i => i.category_name === cat);
+  }else{
+    list = (services[cat] || []).filter(i => !/美甲|曼曼/.test(String(i.name||"")));
+  }
+
+  if(!list.length){
+    box.className = "service-list muted";
+    box.textContent = "此類別目前沒有開放療程。";
+    return;
+  }
+
+  list.forEach(svc => {
+    const div = document.createElement("div");
+    div.className = "service-item";
+    const priceText = Number(svc.price || 0) > 0 ? `｜NT$ ${c60Money(svc.price)}` : "";
+    div.innerHTML = `${svc.name}<small>${svc.duration} 分鐘${priceText}｜點擊加入本次預約</small>`;
+    div.onclick = () => {
+      const staff = svc.default_staff || window.c60StaffMembers?.[0]?.name || "不指定";
+      addToCart({
+        name: svc.name,
+        category: svc.category_name || cat,
+        duration: Number(svc.duration || 60),
+        price: Number(svc.price || 0),
+        salary_type: svc.salary_type || "30",
+        fixed_salary: Number(svc.fixed_salary || 0),
+        service_item_id: svc.id || null,
+        cartId: Date.now()+Math.random(),
+        therapist: staff
+      });
+    };
+    box.appendChild(div);
+  });
+};
+
+window.renderTherapistSelect = function(item){
+  const staff = (window.c60StaffMembers && window.c60StaffMembers.length ? window.c60StaffMembers.map(s => s.name) : (categoryTherapists[item.category] || ["不指定"])).filter(n => !/美甲|曼曼/.test(String(n)));
+  const options = staff.map(t => `<option value="${t}" ${item.therapist===t?"selected":""}>${t}</option>`).join("");
+  return `<div class="field" style="margin-top:8px;margin-bottom:0;">
+    <label>服務人員</label>
+    <select onchange="changeItemTherapist('${item.cartId}', this.value)">${options}</select>
+  </div>`;
+};
+
+function c60EnsureLineHidden(){
+  let line = document.getElementById("lineName");
+  if(!line){
+    line = document.createElement("input");
+    line.type = "hidden";
+    line.id = "lineName";
+    line.value = "";
+    document.body.appendChild(line);
+  }
+  const field = line.closest(".field");
+  if(field) field.style.display = "none";
+}
+
+function c60EnsureBirthdayMonth(){
+  if(document.getElementById("birthdayMonth")) return;
+  const phone = document.querySelector("#phone, input[name='phone'], input[type='tel']");
+  const anchor = phone?.closest(".field") || phone?.parentElement;
+  if(!anchor) return;
+  const field = document.createElement("div");
+  field.className = "field";
+  field.innerHTML = `<label>生日月份</label><select id="birthdayMonth" name="birthday_month"><option value="">可不填</option>${Array.from({length:12},(_,i)=>`<option value="${i+1}月">${i+1}月</option>`).join("")}</select>`;
+  anchor.insertAdjacentElement("afterend", field);
+}
+
+async function c60LoadBookingSetting(){
+  try{
+    const {data,error} = await db.from("booking_settings").select("*").eq("id",1).single();
+    if(error) throw error;
+    return data || {booking_open_mode:"auto_2_months"};
+  }catch(e){
+    return {booking_open_mode:"auto_2_months"};
+  }
+}
+function c60ISO(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+async function c60SetDateLimit(){
+  const input = $("date") || document.getElementById("bookingDate");
+  if(!input) return;
+  const s = await c60LoadBookingSetting();
+  const today = new Date();
+  const max = new Date();
+  max.setMonth(max.getMonth()+2);
+  if(s.booking_open_mode === "manual_range" && s.manual_start && s.manual_end){
+    input.min = s.manual_start;
+    input.max = s.manual_end;
+  }else{
+    input.min = c60ISO(today);
+    input.max = c60ISO(max);
+  }
+  if(!input.value || input.value < input.min) input.value = input.min;
+  if(input.value > input.max) input.value = input.max;
+}
+
+async function c60FrontInit(){
+  c60EnsureLineHidden();
+  c60EnsureBirthdayMonth();
+  await c60LoadFrontStaff();
+  await c60LoadFrontServices();
+  renderCategories();
+  await c60SetDateLimit();
+  if(typeof renderSlots === "function") renderSlots();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(c60FrontInit, 500);
+});
+document.addEventListener("click", () => setTimeout(() => { c60EnsureLineHidden(); c60EnsureBirthdayMonth(); }, 150));
+document.addEventListener("change", () => setTimeout(c60SetDateLimit, 120));
