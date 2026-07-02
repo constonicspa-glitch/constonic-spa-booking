@@ -588,3 +588,107 @@ input[id*="Amount"]{
     max-width:90%;
   }
 }
+
+
+/* CONSTONIC V6.0 Final Patch 1 */
+.fp1-tech-row{
+  display:grid !important;
+  grid-template-columns:minmax(180px,1fr) minmax(150px,.65fr) minmax(160px,.7fr) minmax(160px,.7fr) !important;
+  gap:14px !important;
+  align-items:end !important;
+  overflow:hidden !important;
+}
+.fp1-rate-select{
+  width:100% !important;
+  min-width:150px !important;
+  max-width:180px !important;
+  box-sizing:border-box !important;
+}
+.fp1-money-input{
+  min-width:150px !important;
+  max-width:190px !important;
+  width:100% !important;
+  box-sizing:border-box !important;
+  font-size:18px !important;
+  font-weight:800 !important;
+}
+.fp1-block-panel{
+  margin:18px 16px;
+  padding:18px;
+  border:1px dashed rgba(184,144,60,.38);
+  border-radius:18px;
+  background:#fffaf0;
+}
+.fp1-block-panel h3{
+  margin-top:0;
+}
+.fp1-block-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  margin:12px 0;
+}
+.fp1-block-grid label{
+  font-weight:800;
+  color:#143c32;
+}
+.fp1-block-grid input,
+.fp1-block-grid select{
+  width:100%;
+  margin-top:6px;
+}
+.fp1-wide{
+  grid-column:1/-1;
+}
+.fp1-category-editor{
+  margin:18px 0;
+  padding:16px;
+  border:1px solid rgba(184,144,60,.25);
+  border-radius:18px;
+  background:#fffdf8;
+}
+.fp1-category-row{
+  display:grid;
+  grid-template-columns:minmax(220px,1fr) 120px 100px;
+  gap:10px;
+  margin:10px 0;
+  align-items:center;
+}
+.fp1-service-group{
+  border:1px solid rgba(184,144,60,.25);
+  border-radius:18px;
+  background:#fffdf8;
+  margin:12px 0;
+  overflow:hidden;
+}
+.fp1-service-group summary{
+  cursor:pointer;
+  list-style:none;
+  padding:16px 18px;
+  font-size:20px;
+  font-weight:900;
+  color:#143c32;
+  background:#fff7e6;
+  display:flex;
+  justify-content:space-between;
+}
+.fp1-service-group summary::-webkit-details-marker{
+  display:none;
+}
+.fp1-service-group-body{
+  padding:12px;
+}
+.fp1-service-row{
+  margin:10px 0 !important;
+}
+@media(max-width:900px){
+  .fp1-tech-row,
+  .fp1-block-grid,
+  .fp1-category-row{
+    grid-template-columns:1fr !important;
+  }
+  .fp1-rate-select,
+  .fp1-money-input{
+    max-width:none !important;
+  }
+}

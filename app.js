@@ -1875,3 +1875,67 @@ window.finalTimeInBlock = function(slot, block){
 };
 
 document.addEventListener("DOMContentLoaded", ()=>setTimeout(finalFrontBrand, 500));
+
+
+/* CONSTONIC FRONT V6.0 Final Patch 1
+   類別名稱與療程前台同步補強。
+*/
+window.CONSTONIC_FRONT_FINAL_PATCH = "V6.0 Final Patch 1";
+
+async function fp1FrontLoadServices(){
+  try{
+    if(typeof db === "undefined" || !db?.from) return false;
+    const [catRes,itemRes] = await Promise.all([
+      db.from("service_categories").select("*").eq("active",true).order("sort_order",{ascending:true}),
+      db.from("service_items").select("*").eq("active",true).order("sort_order",{ascending:true})
+    ]);
+    if(catRes.error || itemRes.error) throw (catRes.error || itemRes.error);
+    const cats = (catRes.data || []).filter(c=>!/美甲|曼曼/.test(c.name || ""));
+    const items = (itemRes.data || []).filter(i=>!/美甲|曼曼/.test(String(i.name+i.category_name)));
+    const box = document.getElementById("categoryButtons");
+    if(!box || !cats.length) return false;
+    box.innerHTML = "";
+    cats.forEach(cat=>{
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = cat.name;
+      btn.onclick = () => fp1FrontSelectCategory(cat.name, items, btn);
+      box.appendChild(btn);
+    });
+    return true;
+  }catch(e){
+    console.warn("前台療程同步失敗", e);
+    return false;
+  }
+}
+
+function fp1FrontSelectCategory(catName, allItems, btn){
+  const box = document.getElementById("categoryButtons");
+  if(box) Array.from(box.children).forEach(b=>b.classList.toggle("active", b===btn));
+  const listBox = document.getElementById("serviceList");
+  if(!listBox) return;
+  const items = allItems.filter(i=>i.category_name===catName);
+  listBox.innerHTML = "";
+  items.forEach(svc=>{
+    const div = document.createElement("div");
+    div.className = "service-item";
+    div.innerHTML = `${svc.name}<small>${Number(svc.duration||0)} 分鐘${Number(svc.price||0)>0 ? "｜NT$ "+Number(svc.price).toLocaleString("zh-TW") : ""}</small>`;
+    div.onclick = () => {
+      const item = {
+        name: svc.name,
+        category: svc.category_name,
+        duration: Number(svc.duration || 60),
+        price: Number(svc.price || 0),
+        salary_type: svc.salary_type || "30",
+        fixed_salary: Number(svc.fixed_salary || 0),
+        service_item_id: svc.id || null,
+        therapist: svc.default_staff || "不指定",
+        cartId: Date.now() + Math.random()
+      };
+      if(typeof addToCart === "function") addToCart(item);
+    };
+    listBox.appendChild(div);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", ()=>setTimeout(fp1FrontLoadServices, 900));

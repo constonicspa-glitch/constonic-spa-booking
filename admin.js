@@ -2157,3 +2157,140 @@ document.addEventListener("DOMContentLoaded", ()=>{
 document.addEventListener("click", ()=>setTimeout(()=>{finalFixSalaryFields(); finalPatchServiceEditButtons(); finalEnhanceBreakBlocks();}, 200));
 document.addEventListener("input", ()=>setTimeout(finalFixSalaryFields, 80));
 document.addEventListener("change", ()=>setTimeout(finalFixSalaryFields, 80));
+
+
+/* CONSTONIC V6.0 Final Patch 1
+   修正：薪資欄位不跑框、時段休息補日期、療程分類收合、類別名稱前台同步。
+*/
+window.CONSTONIC_FINAL_PATCH = "V6.0 Final Patch 1";
+
+function fp1MoneyLayoutFix(){
+  document.querySelectorAll("#techRows .tech-row, #v2TechRows .tech-row, .c64-tech-row, .c60-tech-row").forEach(row=>row.classList.add("fp1-tech-row"));
+  document.querySelectorAll('select[id^="techRate_"], select[id*="Rate"]').forEach(sel=>sel.classList.add("fp1-rate-select"));
+  document.querySelectorAll('input[id^="techAmount_"],input[id^="fixedSalary_"],input[id*="Amount"],input[id*="Fixed"]').forEach(inp=>inp.classList.add("fp1-money-input"));
+}
+
+function fp1EnhanceBreakBlocks(){
+  const cards = Array.from(document.querySelectorAll("section.card,.card"));
+  const blockCard = cards.find(card => /店休|休假|關閉預約/.test(card.querySelector("h2,h3,summary")?.textContent || ""));
+  if(!blockCard || blockCard.querySelector(".fp1-block-panel")) return;
+  const panel = document.createElement("div");
+  panel.className = "fp1-block-panel";
+  panel.innerHTML = `
+    <h3>新增時段休息</h3>
+    <p class="hint">例如：某天上午 10:00～12:00 不開放，下午照常可預約。</p>
+    <div class="fp1-block-grid">
+      <label>休息日期 <input id="fp1BlockDate" type="date"></label>
+      <label>休息對象 <select id="fp1BlockTherapist"><option value="全店">全店</option></select></label>
+      <label>開始時間 <input id="fp1BlockStart" type="time"></label>
+      <label>結束時間 <input id="fp1BlockEnd" type="time"></label>
+      <label class="fp1-wide">原因 <input id="fp1BlockReason" placeholder="例如：上午外出、午休、課程"></label>
+    </div>
+    <button type="button" class="primary" onclick="fp1SaveTimeBlock()">儲存時段休息</button>
+  `;
+  blockCard.appendChild(panel);
+  fp1LoadStaffForBlock();
+}
+async function fp1LoadStaffForBlock(){
+  const sel = document.getElementById("fp1BlockTherapist");
+  if(!sel || sel.dataset.loaded) return;
+  sel.dataset.loaded = "1";
+  try{
+    const {data} = await db.from("staff_members").select("*").eq("active",true).order("sort_order",{ascending:true});
+    const names = (data || []).filter(s=>!/美甲|曼曼/.test(s.name || "")).map(s=>s.name);
+    sel.innerHTML = `<option value="全店">全店</option>` + names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+  }catch(e){}
+}
+window.fp1SaveTimeBlock = async function(){
+  const date = document.getElementById("fp1BlockDate")?.value;
+  const therapist = document.getElementById("fp1BlockTherapist")?.value || "全店";
+  const start_time = document.getElementById("fp1BlockStart")?.value;
+  const end_time = document.getElementById("fp1BlockEnd")?.value;
+  const reason = document.getElementById("fp1BlockReason")?.value || "時段休息";
+  if(!date || !start_time || !end_time){ alert("請填休息日期、開始時間、結束時間"); return; }
+  if(start_time >= end_time){ alert("結束時間必須晚於開始時間"); return; }
+  const {error} = await db.from("booking_blocks").insert({date, therapist, reason, all_day:false, start_time, end_time, repeat_type:"none"});
+  if(error){ alert("儲存時段休息失敗，請確認已執行 V6.0 Final SQL"); console.error(error); return; }
+  alert("時段休息已儲存，前台重新整理後同步。");
+  if(typeof loadBlocks === "function") loadBlocks();
+  if(typeof renderCalendar === "function") renderCalendar();
+};
+
+async function fp1RenderGroupedServices(){
+  const box = document.getElementById("c60ServiceList");
+  if(!box) return;
+  try{
+    const {data,error} = await db.from("service_items").select("*").order("category_name",{ascending:true}).order("sort_order",{ascending:true});
+    if(error) throw error;
+    const list = (data || []).filter(i=>!/美甲|曼曼/.test(String(i.name+i.category_name)));
+    const groups = {};
+    list.forEach(i=>{ const cat=i.category_name||"未分類"; (groups[cat]=groups[cat]||[]).push(i); });
+    box.innerHTML = Object.keys(groups).sort().map(cat=>`
+      <details class="fp1-service-group" open>
+        <summary>${escapeHtml(cat)} <span>${groups[cat].length} 項</span></summary>
+        <div class="fp1-service-group-body">
+          ${groups[cat].map(i=>`
+            <div class="c60-service-row fp1-service-row">
+              <div><strong>${escapeHtml(i.name)}</strong><span>${escapeHtml(i.category_name)}｜${Number(i.duration||0)}分｜NT$ ${Number(i.price||0).toLocaleString("zh-TW")}｜${i.salary_type==="fixed"?"固定薪資 NT$ "+Number(i.fixed_salary||0).toLocaleString("zh-TW"):(i.salary_type||"30")+"%"}</span></div>
+              <div>
+                <button type="button" onclick="c60ToggleServiceItem('${i.id}', ${i.active === false ? "true" : "false"})">${i.active === false ? "啟用" : "停用"}</button>
+                <button type="button" onclick="c64EditServiceItem('${i.id}')">編輯</button>
+                <button type="button" onclick="c60DeleteServiceItem('${i.id}')">刪除</button>
+              </div>
+            </div>`).join("")}
+        </div>
+      </details>`).join("");
+  }catch(e){ console.warn("分類療程清單讀取失敗", e); }
+}
+
+async function fp1InjectCategoryEditor(){
+  const panel = document.getElementById("c60ServicePanel");
+  if(!panel || panel.querySelector(".fp1-category-editor")) return;
+  const editor = document.createElement("div");
+  editor.className = "fp1-category-editor";
+  editor.innerHTML = `<h3>療程類別管理</h3><p class="hint">修改類別名稱後，前台療程類別會同步更新。</p><div id="fp1CategoryList"></div>`;
+  const hr = panel.querySelector("hr");
+  if(hr) hr.insertAdjacentElement("beforebegin", editor); else panel.prepend(editor);
+  await fp1LoadCategoryEditor();
+}
+async function fp1LoadCategoryEditor(){
+  const box = document.getElementById("fp1CategoryList");
+  if(!box) return;
+  try{
+    const {data,error} = await db.from("service_categories").select("*").order("sort_order",{ascending:true});
+    if(error) throw error;
+    const cats = (data || []).filter(c=>!/美甲|曼曼/.test(c.name || ""));
+    box.innerHTML = cats.map(c=>`
+      <div class="fp1-category-row">
+        <input id="fp1CatName_${c.id}" value="${escapeHtml(c.name)}">
+        <input id="fp1CatSort_${c.id}" type="number" value="${Number(c.sort_order || 100)}">
+        <button type="button" onclick="fp1SaveCategory('${c.id}')">儲存</button>
+      </div>`).join("");
+  }catch(e){ console.warn(e); }
+}
+window.fp1SaveCategory = async function(id){
+  const name = document.getElementById(`fp1CatName_${id}`)?.value?.trim();
+  const sort_order = Number(document.getElementById(`fp1CatSort_${id}`)?.value || 100);
+  if(!name){ alert("請輸入類別名稱"); return; }
+  const {error:e1} = await db.from("service_categories").update({name, sort_order}).eq("id", id);
+  if(e1){ alert("類別儲存失敗"); console.error(e1); return; }
+  await db.from("service_items").update({category_name:name}).eq("category_id", id);
+  alert("類別已更新，前台重新整理後同步。");
+  await fp1LoadCategoryEditor();
+  await fp1RenderGroupedServices();
+};
+
+const fp1OldRefresh = window.c60RefreshServicePanel;
+window.c60RefreshServicePanel = async function(){
+  if(typeof fp1OldRefresh === "function") await fp1OldRefresh.apply(this, arguments);
+  await fp1InjectCategoryEditor();
+  await fp1RenderGroupedServices();
+};
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  setTimeout(()=>{fp1MoneyLayoutFix(); fp1EnhanceBreakBlocks(); fp1InjectCategoryEditor(); fp1RenderGroupedServices();}, 1000);
+  setTimeout(()=>{fp1MoneyLayoutFix(); fp1EnhanceBreakBlocks(); fp1InjectCategoryEditor(); fp1RenderGroupedServices();}, 2200);
+});
+document.addEventListener("click", ()=>setTimeout(()=>{fp1MoneyLayoutFix(); fp1EnhanceBreakBlocks(); fp1RenderGroupedServices();}, 250));
+document.addEventListener("input", ()=>setTimeout(fp1MoneyLayoutFix, 100));
+document.addEventListener("change", ()=>setTimeout(fp1MoneyLayoutFix, 100));
