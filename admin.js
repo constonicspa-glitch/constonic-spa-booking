@@ -2294,3 +2294,165 @@ document.addEventListener("DOMContentLoaded", ()=>{
 document.addEventListener("click", ()=>setTimeout(()=>{fp1MoneyLayoutFix(); fp1EnhanceBreakBlocks(); fp1RenderGroupedServices();}, 250));
 document.addEventListener("input", ()=>setTimeout(fp1MoneyLayoutFix, 100));
 document.addEventListener("change", ()=>setTimeout(fp1MoneyLayoutFix, 100));
+
+
+/* CONSTONIC V6.0 Final Patch 2
+   修正：
+   1. 療程類別可修改、刪除、排序
+   2. 新增類別後，下方療程新增的類別選單同步出現
+   3. 療程清單依所有類別分類收合，空類別也顯示
+   4. 移除重複「編輯」按鈕
+*/
+window.CONSTONIC_FINAL_PATCH2 = "V6.0 Final Patch 2";
+
+function fp2CleanDuplicateEditButtons(){
+  document.querySelectorAll(".c60-service-row,.fp1-service-row").forEach(row=>{
+    const editBtns = Array.from(row.querySelectorAll("button")).filter(b=>/編輯/.test(b.textContent));
+    editBtns.forEach((b,idx)=>{ if(idx>0) b.remove(); });
+  });
+}
+
+async function fp2LoadCategoriesAndItems(){
+  const [catRes,itemRes] = await Promise.all([
+    db.from("service_categories").select("*").order("sort_order",{ascending:true}),
+    db.from("service_items").select("*").order("category_name",{ascending:true}).order("sort_order",{ascending:true})
+  ]);
+  if(catRes.error) throw catRes.error;
+  if(itemRes.error) throw itemRes.error;
+  const cats = (catRes.data || []).filter(c=>!/美甲|曼曼/.test(c.name || ""));
+  const items = (itemRes.data || []).filter(i=>!/美甲|曼曼/.test(String(i.name+i.category_name)));
+  return {cats, items};
+}
+
+async function fp2RefreshCategorySelect(){
+  const sel = document.getElementById("serviceCategorySelect");
+  if(!sel) return;
+  try{
+    const {cats} = await fp2LoadCategoriesAndItems();
+    sel.innerHTML = cats.map(c=>`<option value="${c.id}" data-name="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
+  }catch(e){ console.warn("類別選單更新失敗", e); }
+}
+
+async function fp2RenderCategoryManager(){
+  const panel = document.getElementById("c60ServicePanel");
+  if(!panel) return;
+  let wrap = panel.querySelector(".fp2-category-manager");
+  if(!wrap){
+    wrap = document.createElement("div");
+    wrap.className = "fp2-category-manager";
+    wrap.innerHTML = `
+      <h3>療程類別管理</h3>
+      <p class="hint">可新增、改名、排序、刪除類別；改名後前台會同步。</p>
+      <div class="fp2-add-cat">
+        <input id="fp2NewCatName" placeholder="新增類別名稱，例如：頭髮">
+        <input id="fp2NewCatSort" type="number" value="100">
+        <button type="button" onclick="fp2AddCategory()">新增類別</button>
+      </div>
+      <div id="fp2CategoryList"></div>
+    `;
+    const old = panel.querySelector(".fp1-category-editor");
+    if(old) old.replaceWith(wrap);
+    else panel.prepend(wrap);
+  }
+  const box = document.getElementById("fp2CategoryList");
+  if(!box) return;
+  try{
+    const {cats} = await fp2LoadCategoriesAndItems();
+    box.innerHTML = cats.map(c=>`
+      <div class="fp2-category-row">
+        <input id="fp2CatName_${c.id}" value="${escapeHtml(c.name)}">
+        <input id="fp2CatSort_${c.id}" type="number" value="${Number(c.sort_order || 100)}">
+        <button type="button" onclick="fp2SaveCategory('${c.id}')">儲存</button>
+        <button type="button" onclick="fp2DeleteCategory('${c.id}', '${escapeHtml(c.name)}')">刪除</button>
+      </div>
+    `).join("");
+  }catch(e){ console.warn("類別管理讀取失敗", e); }
+}
+
+window.fp2AddCategory = async function(){
+  const name = document.getElementById("fp2NewCatName")?.value?.trim();
+  const sort_order = Number(document.getElementById("fp2NewCatSort")?.value || 100);
+  if(!name){ alert("請輸入類別名稱"); return; }
+  const {error} = await db.from("service_categories").insert({name, active:true, sort_order});
+  if(error){ alert("新增類別失敗，可能已有同名類別"); console.error(error); return; }
+  document.getElementById("fp2NewCatName").value = "";
+  await fp2RenderCategoryManager();
+  await fp2RefreshCategorySelect();
+  await fp2RenderGroupedServices();
+};
+
+window.fp2SaveCategory = async function(id){
+  const name = document.getElementById(`fp2CatName_${id}`)?.value?.trim();
+  const sort_order = Number(document.getElementById(`fp2CatSort_${id}`)?.value || 100);
+  if(!name){ alert("請輸入類別名稱"); return; }
+  const {error} = await db.from("service_categories").update({name, sort_order}).eq("id", id);
+  if(error){ alert("儲存類別失敗"); console.error(error); return; }
+  await db.from("service_items").update({category_name:name}).eq("category_id", id);
+  await fp2RenderCategoryManager();
+  await fp2RefreshCategorySelect();
+  await fp2RenderGroupedServices();
+  alert("類別已更新，前台重新整理後同步。");
+};
+
+window.fp2DeleteCategory = async function(id, name){
+  if(!confirm(`確定刪除「${name}」類別？\n提醒：若類別下有療程，建議先改到其他類別或停用。`)) return;
+  const {data:items} = await db.from("service_items").select("id").eq("category_id", id).limit(1);
+  if(items && items.length){
+    alert("此類別底下還有療程，請先刪除/停用療程或移到其他類別，再刪除類別。");
+    return;
+  }
+  const {error} = await db.from("service_categories").delete().eq("id", id);
+  if(error){ alert("刪除類別失敗"); console.error(error); return; }
+  await fp2RenderCategoryManager();
+  await fp2RefreshCategorySelect();
+  await fp2RenderGroupedServices();
+};
+
+async function fp2RenderGroupedServices(){
+  const box = document.getElementById("c60ServiceList");
+  if(!box) return;
+  try{
+    const {cats, items} = await fp2LoadCategoriesAndItems();
+    const groups = {};
+    cats.forEach(c=>groups[c.name]=[]);
+    items.forEach(i=>{
+      const cat = i.category_name || "未分類";
+      groups[cat] = groups[cat] || [];
+      groups[cat].push(i);
+    });
+    const names = Object.keys(groups);
+    box.innerHTML = names.map(cat=>`
+      <details class="fp2-service-group">
+        <summary>${escapeHtml(cat)} <span>${groups[cat].length} 項</span></summary>
+        <div class="fp2-service-group-body">
+          ${groups[cat].length ? groups[cat].map(i=>`
+            <div class="c60-service-row fp2-service-row">
+              <div><strong>${escapeHtml(i.name)}</strong><span>${escapeHtml(i.category_name)}｜${Number(i.duration||0)}分｜NT$ ${Number(i.price||0).toLocaleString("zh-TW")}｜${i.salary_type==="fixed"?"固定薪資 NT$ "+Number(i.fixed_salary||0).toLocaleString("zh-TW"):(i.salary_type||"30")+"%"}</span></div>
+              <div>
+                <button type="button" onclick="c60ToggleServiceItem('${i.id}', ${i.active === false ? "true" : "false"})">${i.active === false ? "啟用" : "停用"}</button>
+                <button type="button" onclick="c64EditServiceItem('${i.id}')">編輯</button>
+                <button type="button" onclick="c60DeleteServiceItem('${i.id}')">刪除</button>
+              </div>
+            </div>
+          `).join("") : `<p class="muted fp2-empty">此類別目前沒有療程，可在上方新增療程。</p>`}
+        </div>
+      </details>
+    `).join("");
+    fp2CleanDuplicateEditButtons();
+  }catch(e){ console.warn("療程分類清單讀取失敗", e); }
+}
+
+const fp2OldRefresh = window.c60RefreshServicePanel;
+window.c60RefreshServicePanel = async function(){
+  if(typeof fp2OldRefresh === "function") await fp2OldRefresh.apply(this, arguments);
+  await fp2RenderCategoryManager();
+  await fp2RefreshCategorySelect();
+  await fp2RenderGroupedServices();
+  fp2CleanDuplicateEditButtons();
+};
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  setTimeout(()=>{fp2RenderCategoryManager(); fp2RefreshCategorySelect(); fp2RenderGroupedServices(); fp2CleanDuplicateEditButtons();}, 1000);
+  setTimeout(()=>{fp2RenderCategoryManager(); fp2RefreshCategorySelect(); fp2RenderGroupedServices(); fp2CleanDuplicateEditButtons();}, 2500);
+});
+document.addEventListener("click", ()=>setTimeout(()=>{fp2CleanDuplicateEditButtons();}, 200));
