@@ -2013,3 +2013,64 @@ function fp2FrontSelectCategory(catName, dbItems, btn){
 }
 
 document.addEventListener("DOMContentLoaded", ()=>setTimeout(fp2FrontLoadServices, 1100));
+
+
+/* CONSTONIC FRONT V6.0 Final Patch 3 */
+window.CONSTONIC_FRONT_FINAL_PATCH3 = "V6.0 Final Patch 3";
+
+function fp3BuiltInItems(catName){
+  if(typeof services==="undefined") return [];
+  const alias = {"熱蠟除毛":"熱臘除毛","熱臘除毛":"熱蠟除毛"};
+  const keys = [catName, alias[catName]].filter(Boolean);
+  for(const k of keys){
+    if(services[k] && Array.isArray(services[k]) && services[k].length){
+      return services[k].map(s=>({...s, category_name:catName, price:s.price||0, salary_type:s.salary_type||"30", fixed_salary:s.fixed_salary||0}));
+    }
+  }
+  return [];
+}
+
+async function fp3FrontLoadServices(){
+  try{
+    if(typeof db==="undefined" || !db?.from) return false;
+    const [catRes,itemRes] = await Promise.all([
+      db.from("service_categories").select("*").eq("active",true).order("sort_order",{ascending:true}),
+      db.from("service_items").select("*").eq("active",true).order("sort_order",{ascending:true})
+    ]);
+    if(catRes.error || itemRes.error) throw (catRes.error || itemRes.error);
+    const cats = (catRes.data||[]).filter(c=>!/美甲|曼曼/.test(c.name||""));
+    const dbItems = (itemRes.data||[]).filter(i=>!/美甲|曼曼/.test(String(i.name+i.category_name)));
+    const box = document.getElementById("categoryButtons");
+    if(!box || !cats.length) return false;
+    box.innerHTML = "";
+    cats.forEach(cat=>{
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = cat.name;
+      btn.onclick = () => fp3FrontSelectCategory(cat.name, dbItems, btn);
+      box.appendChild(btn);
+    });
+    return true;
+  }catch(e){ console.warn("前台療程同步失敗",e); return false; }
+}
+function fp3FrontSelectCategory(catName, dbItems, btn){
+  const box = document.getElementById("categoryButtons");
+  if(box) Array.from(box.children).forEach(b=>b.classList.toggle("active", b===btn));
+  const listBox = document.getElementById("serviceList");
+  if(!listBox) return;
+  let items = dbItems.filter(i=>i.category_name===catName);
+  if(!items.length) items = fp3BuiltInItems(catName);
+  listBox.innerHTML = "";
+  if(!items.length){ listBox.innerHTML = `<p class="muted">此類別目前沒有療程，請洽店家。</p>`; return; }
+  items.forEach(svc=>{
+    const div = document.createElement("div");
+    div.className = "service-item";
+    div.innerHTML = `${svc.name}<small>${Number(svc.duration||0)} 分鐘${Number(svc.price||0)>0 ? "｜NT$ "+Number(svc.price).toLocaleString("zh-TW") : ""}</small>`;
+    div.onclick = () => {
+      const item = {name:svc.name, category:svc.category_name||catName, duration:Number(svc.duration||60), price:Number(svc.price||0), salary_type:svc.salary_type||"30", fixed_salary:Number(svc.fixed_salary||0), service_item_id:svc.id||null, therapist:svc.default_staff||"不指定", cartId:Date.now()+Math.random()};
+      if(typeof addToCart==="function") addToCart(item);
+    };
+    listBox.appendChild(div);
+  });
+}
+document.addEventListener("DOMContentLoaded",()=>setTimeout(fp3FrontLoadServices,1400));

@@ -2456,3 +2456,41 @@ document.addEventListener("DOMContentLoaded", ()=>{
   setTimeout(()=>{fp2RenderCategoryManager(); fp2RefreshCategorySelect(); fp2RenderGroupedServices(); fp2CleanDuplicateEditButtons();}, 2500);
 });
 document.addEventListener("click", ()=>setTimeout(()=>{fp2CleanDuplicateEditButtons();}, 200));
+
+
+/* CONSTONIC V6.0 Final Patch 3 */
+window.CONSTONIC_FINAL_PATCH3 = "V6.0 Final Patch 3";
+
+function fp3FixCashierLayout(){
+  document.querySelectorAll("#techRows .tech-row,#v2TechRows .tech-row,.c64-tech-row,.c60-tech-row,.fp1-tech-row").forEach(row=>row.classList.add("fp3-tech-row"));
+  document.querySelectorAll('select[id^="techRate_"],select[id*="Rate"]').forEach(sel=>sel.classList.add("fp3-rate-select"));
+  document.querySelectorAll('input[id^="techAmount_"],input[id^="fixedSalary_"],input[id*="Amount"],input[id*="Fixed"]').forEach(inp=>inp.classList.add("fp3-money-input"));
+}
+
+function fp3RemoveDuplicates(){
+  const catPanels = Array.from(document.querySelectorAll(".fp1-category-editor,.fp2-category-manager"));
+  if(catPanels.length){
+    const keep = document.querySelector(".fp2-category-manager") || catPanels[0];
+    catPanels.forEach(p=>{ if(p!==keep) p.remove(); });
+  }
+  document.querySelectorAll(".final-time-block-note").forEach(el=>el.remove());
+  const blockPanels = Array.from(document.querySelectorAll(".fp1-block-panel"));
+  blockPanels.forEach((p,i)=>{ if(i>0) p.remove(); });
+  document.querySelectorAll(".c60-service-row,.fp1-service-row,.fp2-service-row").forEach(row=>{
+    const edits = Array.from(row.querySelectorAll("button")).filter(b=>/編輯/.test(b.textContent));
+    edits.forEach((b,i)=>{ if(i>0) b.remove(); });
+  });
+}
+
+window.finalEnhanceBreakBlocks = function(){};
+window.fp1InjectCategoryEditor = async function(){};
+window.fp1RenderGroupedServices = async function(){ if(typeof fp2RenderGroupedServices==="function") await fp2RenderGroupedServices(); };
+
+document.addEventListener("DOMContentLoaded",()=>{
+  setTimeout(()=>{fp3FixCashierLayout();fp3RemoveDuplicates();},700);
+  setTimeout(()=>{fp3FixCashierLayout();fp3RemoveDuplicates();},1800);
+  setTimeout(()=>{fp3FixCashierLayout();fp3RemoveDuplicates();},3200);
+});
+document.addEventListener("click",()=>setTimeout(()=>{fp3FixCashierLayout();fp3RemoveDuplicates();},200));
+document.addEventListener("input",()=>setTimeout(fp3FixCashierLayout,80));
+document.addEventListener("change",()=>setTimeout(fp3FixCashierLayout,80));

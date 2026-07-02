@@ -741,3 +741,37 @@ input[id*="Amount"]{
     grid-template-columns:1fr !important;
   }
 }
+
+
+/* CONSTONIC V6.0 Final Patch 3 */
+.fp3-tech-row{
+  display:grid !important;
+  grid-template-columns:minmax(160px,1fr) minmax(130px,150px) minmax(140px,155px) minmax(130px,150px) !important;
+  gap:12px !important;
+  align-items:end !important;
+  overflow:hidden !important;
+  max-width:100% !important;
+}
+.fp3-tech-row .field{min-width:0 !important;max-width:100% !important;}
+.fp3-rate-select{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:155px !important;
+  box-sizing:border-box !important;
+  padding-left:14px !important;
+  padding-right:34px !important;
+  font-size:17px !important;
+}
+.fp3-money-input{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:150px !important;
+  box-sizing:border-box !important;
+  font-size:18px !important;
+  font-weight:800 !important;
+}
+.cashier-panel,.cashier-panel *{box-sizing:border-box !important;}
+@media(max-width:900px){
+  .fp3-tech-row{grid-template-columns:1fr !important;}
+  .fp3-rate-select,.fp3-money-input{max-width:none !important;}
+}
