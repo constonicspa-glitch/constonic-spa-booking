@@ -775,3 +775,14 @@ input[id*="Amount"]{
   .fp3-tech-row{grid-template-columns:1fr !important;}
   .fp3-rate-select,.fp3-money-input{max-width:none !important;}
 }
+
+
+/* CONSTONIC V6.0 Final Patch 4 */
+.fp2-service-group summary,
+.fp1-service-group summary{
+  user-select:none;
+}
+.fp2-service-group[open] > summary,
+.fp1-service-group[open] > summary{
+  border-bottom:1px solid rgba(184,144,60,.22);
+}

@@ -2494,3 +2494,108 @@ document.addEventListener("DOMContentLoaded",()=>{
 document.addEventListener("click",()=>setTimeout(()=>{fp3FixCashierLayout();fp3RemoveDuplicates();},200));
 document.addEventListener("input",()=>setTimeout(fp3FixCashierLayout,80));
 document.addEventListener("change",()=>setTimeout(fp3FixCashierLayout,80));
+
+
+/* CONSTONIC V6.0 Final Patch 4
+   修正療程分類展開閃退：
+   - 停止 click 後重畫整個療程清單
+   - 保留展開狀態
+   - 編輯按鈕只留一個
+*/
+window.CONSTONIC_FINAL_PATCH4 = "V6.0 Final Patch 4";
+
+window.fp1RenderGroupedServices = async function(){};
+window.finalPatchServiceEditButtons = function(){};
+window.finalPatchServiceListEditButtons = function(){};
+
+function fp4CleanDuplicateEditButtons(){
+  document.querySelectorAll(".c60-service-row,.fp1-service-row,.fp2-service-row").forEach(row=>{
+    const edits = Array.from(row.querySelectorAll("button")).filter(b=>/編輯/.test((b.textContent || "").trim()));
+    edits.forEach((btn,idx)=>{ if(idx > 0) btn.remove(); });
+  });
+}
+
+function fp4RememberOpenGroups(){
+  const open = {};
+  document.querySelectorAll(".fp2-service-group,.fp1-service-group").forEach(d=>{
+    const name = (d.querySelector("summary")?.childNodes?.[0]?.textContent || d.querySelector("summary")?.textContent || "").trim();
+    if(name) open[name] = d.open;
+  });
+  return open;
+}
+
+async function fp4RenderGroupedServices(){
+  const box = document.getElementById("c60ServiceList");
+  if(!box) return;
+  const openState = fp4RememberOpenGroups();
+
+  try{
+    const [catRes,itemRes] = await Promise.all([
+      db.from("service_categories").select("*").order("sort_order",{ascending:true}),
+      db.from("service_items").select("*").order("category_name",{ascending:true}).order("sort_order",{ascending:true})
+    ]);
+    if(catRes.error) throw catRes.error;
+    if(itemRes.error) throw itemRes.error;
+
+    const cats = (catRes.data || []).filter(c=>!/美甲|曼曼/.test(c.name || ""));
+    const items = (itemRes.data || []).filter(i=>!/美甲|曼曼/.test(String(i.name+i.category_name)));
+
+    const groups = {};
+    cats.forEach(c=>groups[c.name]=[]);
+    items.forEach(i=>{
+      const cat = i.category_name || "未分類";
+      groups[cat] = groups[cat] || [];
+      groups[cat].push(i);
+    });
+
+    box.innerHTML = Object.keys(groups).map(cat=>{
+      const isOpen = openState[cat] === true ? "open" : "";
+      return `
+        <details class="fp2-service-group" ${isOpen}>
+          <summary>${escapeHtml(cat)} <span>${groups[cat].length} 項</span></summary>
+          <div class="fp2-service-group-body">
+            ${groups[cat].length ? groups[cat].map(i=>`
+              <div class="c60-service-row fp2-service-row">
+                <div>
+                  <strong>${escapeHtml(i.name)}</strong>
+                  <span>${escapeHtml(i.category_name)}｜${Number(i.duration||0)}分｜NT$ ${Number(i.price||0).toLocaleString("zh-TW")}｜${i.salary_type==="fixed"?"固定薪資 NT$ "+Number(i.fixed_salary||0).toLocaleString("zh-TW"):(i.salary_type||"30")+"%"}</span>
+                </div>
+                <div>
+                  <button type="button" onclick="c60ToggleServiceItem('${i.id}', ${i.active === false ? "true" : "false"})">${i.active === false ? "啟用" : "停用"}</button>
+                  <button type="button" onclick="c64EditServiceItem('${i.id}')">編輯</button>
+                  <button type="button" onclick="c60DeleteServiceItem('${i.id}')">刪除</button>
+                </div>
+              </div>
+            `).join("") : `<p class="muted fp2-empty">此類別目前沒有療程，可在上方新增療程。</p>`}
+          </div>
+        </details>`;
+    }).join("");
+
+    fp4CleanDuplicateEditButtons();
+  }catch(e){
+    console.warn("療程分類清單讀取失敗", e);
+  }
+}
+
+/* 覆蓋舊版，只有在真的刷新療程時才重畫，不在每次點擊重畫 */
+window.fp2RenderGroupedServices = fp4RenderGroupedServices;
+
+function fp4PatchClickStability(){
+  document.querySelectorAll(".fp2-service-group summary,.fp1-service-group summary").forEach(summary=>{
+    if(summary.dataset.fp4Stable) return;
+    summary.dataset.fp4Stable = "1";
+    summary.addEventListener("click", e=>{
+      e.stopPropagation();
+      setTimeout(fp4CleanDuplicateEditButtons, 50);
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  setTimeout(()=>{fp4RenderGroupedServices(); fp4PatchClickStability(); fp4CleanDuplicateEditButtons();}, 1000);
+  setTimeout(()=>{fp4PatchClickStability(); fp4CleanDuplicateEditButtons();}, 2500);
+});
+
+document.addEventListener("click", ()=>{
+  setTimeout(()=>{fp4PatchClickStability(); fp4CleanDuplicateEditButtons();}, 120);
+});
