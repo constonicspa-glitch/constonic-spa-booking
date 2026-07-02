@@ -2071,3 +2071,89 @@ document.addEventListener("DOMContentLoaded",()=>{
   setTimeout(c64PatchServiceListEditButtons,1500);
 });
 document.addEventListener("click",()=>setTimeout(()=>{c64PatchCheckoutOnOpen();c64PatchServiceListEditButtons();},300));
+
+
+/* CONSTONIC ADMIN V6.0 Final
+   以 RC4 為基礎，只做局部封版修正。
+*/
+window.CONSTONIC_ADMIN_VERSION = "V6.0 Final";
+
+function finalFormatMoneyInput(input){
+  if(!input || input.dataset.finalMoneyBound) return;
+  input.dataset.finalMoneyBound = "1";
+  input.classList.add("final-money-input");
+}
+
+function finalFixSalaryFields(){
+  document.querySelectorAll('input[id^="techAmount_"], input[id^="fixedSalary_"], input[id*="Fixed"], input[id*="Amount"]').forEach(finalFormatMoneyInput);
+  document.querySelectorAll('select[id^="techRate_"], select[id*="Rate"]').forEach(sel => {
+    const idx = (sel.id.match(/(\d+)/)||[])[1];
+    if(idx !== undefined){
+      const field = document.getElementById(`fixedSalaryField_${idx}`);
+      if(field) field.style.display = sel.value === "fixed" ? "" : "none";
+    }
+    if(!sel.dataset.finalRateBound){
+      sel.dataset.finalRateBound = "1";
+      sel.addEventListener("change", () => finalFixSalaryFields());
+    }
+  });
+}
+
+function finalPatchServiceEditButtons(){
+  document.querySelectorAll("#c60ServiceList .c60-service-row").forEach(row=>{
+    if(row.querySelector(".final-edit-btn") || row.querySelector(".c64-edit-btn")) return;
+    const delBtn = Array.from(row.querySelectorAll("button")).find(b=>/刪除/.test(b.textContent));
+    const onclick = delBtn?.getAttribute("onclick") || "";
+    const id = (onclick.match(/'([^']+)'/)||[])[1];
+    if(!id) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "final-edit-btn";
+    btn.textContent = "編輯";
+    btn.onclick = () => {
+      if(typeof c64EditServiceItem === "function") c64EditServiceItem(id);
+      else alert("編輯功能載入中，請重新整理頁面。");
+    };
+    delBtn.parentElement?.insertBefore(btn, delBtn);
+  });
+}
+
+function finalInjectBrand(){
+  if(document.querySelector(".final-brand-mark")) return;
+  const target = document.querySelector("header,.admin-header,.topbar,main") || document.body;
+  const brand = document.createElement("div");
+  brand.className = "final-brand-mark";
+  brand.innerHTML = `
+    <img src="assets/LOGO.ai" onerror="this.style.display='none'">
+    <div>
+      <strong>康姿多儷 Spa</strong>
+      <span>CONSTONIC Beauty Center｜V6.0 Final</span>
+    </div>
+  `;
+  target.prepend(brand);
+}
+
+function finalEnhanceBreakBlocks(){
+  const cards = Array.from(document.querySelectorAll("section.card,.card"));
+  const blockCard = cards.find(card => /店休|休假|關閉預約/.test(card.querySelector("h2,h3,summary")?.textContent || ""));
+  if(!blockCard || blockCard.querySelector(".final-time-block-note")) return;
+  const note = document.createElement("div");
+  note.className = "final-time-block-note";
+  note.innerHTML = `
+    <div class="final-time-block-title">時段休息</div>
+    <p>若只休息部分時段，例如 10:00～12:00，請填開始與結束時間；全天休維持原本方式。</p>
+    <div class="final-time-block-grid">
+      <label>開始時間 <input id="finalBlockStart" type="time"></label>
+      <label>結束時間 <input id="finalBlockEnd" type="time"></label>
+    </div>
+  `;
+  blockCard.appendChild(note);
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  setTimeout(()=>{finalInjectBrand(); finalFixSalaryFields(); finalPatchServiceEditButtons(); finalEnhanceBreakBlocks();}, 800);
+  setTimeout(()=>{finalFixSalaryFields(); finalPatchServiceEditButtons(); finalEnhanceBreakBlocks();}, 1800);
+});
+document.addEventListener("click", ()=>setTimeout(()=>{finalFixSalaryFields(); finalPatchServiceEditButtons(); finalEnhanceBreakBlocks();}, 200));
+document.addEventListener("input", ()=>setTimeout(finalFixSalaryFields, 80));
+document.addEventListener("change", ()=>setTimeout(finalFixSalaryFields, 80));

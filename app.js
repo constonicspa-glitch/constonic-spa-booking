@@ -1847,3 +1847,31 @@ document.addEventListener("DOMContentLoaded", () => {
   setTimeout(c64InitFront, 700);
   setTimeout(c64InitFront, 1800);
 });
+
+
+/* CONSTONIC FRONT V6.0 Final
+   以 RC4 為基礎，只補品牌，不重寫預約核心。
+*/
+window.CONSTONIC_FRONT_VERSION = "V6.0 Final";
+
+function finalFrontBrand(){
+  if(document.querySelector(".final-brand-mark")) return;
+  const target = document.querySelector("header,.hero,.brand-header,main") || document.body;
+  const brand = document.createElement("div");
+  brand.className = "final-brand-mark final-front-brand";
+  brand.innerHTML = `
+    <img src="assets/LOGO.ai" onerror="this.style.display='none'">
+    <div>
+      <strong>康姿多儷 Spa</strong>
+      <span>CONSTONIC Beauty Center｜線上預約</span>
+    </div>
+  `;
+  target.prepend(brand);
+}
+
+window.finalTimeInBlock = function(slot, block){
+  if(!block || !block.start_time || !block.end_time) return false;
+  return String(slot) >= String(block.start_time) && String(slot) < String(block.end_time);
+};
+
+document.addEventListener("DOMContentLoaded", ()=>setTimeout(finalFrontBrand, 500));

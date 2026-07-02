@@ -473,3 +473,118 @@ button,.primary{
     width:100% !important;
   }
 }
+
+
+/* CONSTONIC V6.0 Final - 局部 UI 封版修正 */
+.final-money-input,
+input[id^="techAmount_"],
+input[id^="fixedSalary_"],
+input[id*="Fixed"],
+input[id*="Amount"]{
+  min-width: 190px !important;
+  width: 100% !important;
+  max-width: 260px !important;
+  font-size: 20px !important;
+  font-weight: 800 !important;
+  padding: 14px 16px !important;
+  letter-spacing: .02em;
+  box-sizing: border-box !important;
+}
+
+.c64-tech-row,
+.c60-tech-row,
+.tech-row{
+  grid-template-columns: minmax(210px,1.2fr) minmax(190px,.9fr) minmax(160px,.8fr) minmax(190px,.8fr) !important;
+  gap: 16px !important;
+  align-items: end !important;
+}
+
+.final-edit-btn{
+  margin-right: 8px !important;
+}
+
+.final-brand-mark{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:16px 18px;
+  margin:0 0 18px 0;
+  border:1px solid rgba(184,144,60,.22);
+  border-radius:22px;
+  background:rgba(255,253,248,.86);
+  color:#143c32;
+  box-shadow:0 12px 30px rgba(92,73,51,.06);
+}
+.final-brand-mark img{
+  width:180px;
+  max-height:80px;
+  object-fit:contain;
+}
+.final-brand-mark strong{
+  display:block;
+  font-size:24px;
+  letter-spacing:.06em;
+}
+.final-brand-mark span{
+  display:block;
+  margin-top:4px;
+  color:#b8903c;
+  font-size:14px;
+  letter-spacing:.08em;
+}
+.final-front-brand{
+  justify-content:center;
+  text-align:left;
+}
+
+.final-time-block-note{
+  margin:16px;
+  padding:16px;
+  border:1px dashed rgba(184,144,60,.38);
+  border-radius:18px;
+  background:#fffaf0;
+}
+.final-time-block-title{
+  font-weight:900;
+  color:#143c32;
+  margin-bottom:8px;
+}
+.final-time-block-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.final-time-block-grid input{
+  width:100%;
+  margin-top:6px;
+}
+
+@media(max-width:1024px){
+  .c64-tech-row,
+  .c60-tech-row,
+  .tech-row{
+    grid-template-columns:1fr 1fr !important;
+  }
+  .final-money-input,
+  input[id^="techAmount_"],
+  input[id^="fixedSalary_"]{
+    max-width:none !important;
+  }
+}
+
+@media(max-width:760px){
+  .c64-tech-row,
+  .c60-tech-row,
+  .tech-row,
+  .final-time-block-grid{
+    grid-template-columns:1fr !important;
+  }
+  .final-brand-mark{
+    flex-direction:column;
+    text-align:center;
+  }
+  .final-brand-mark img{
+    width:220px;
+    max-width:90%;
+  }
+}
