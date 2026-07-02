@@ -1737,3 +1737,113 @@ function rc3Init(){
 document.addEventListener("DOMContentLoaded", ()=>{setTimeout(rc3Init,300);setTimeout(rc3Init,1200);});
 document.addEventListener("click", ()=>setTimeout(rc3Init,150));
 document.addEventListener("change", ()=>setTimeout(rc3Init,150));
+
+
+/* CONSTONIC FRONT V6.0 RC4
+   修正：
+   - 後台新增療程後，前台同步顯示
+   - 後台新增人員後，前台服務人員選單穩定
+*/
+window.CONSTONIC_FRONT_VERSION = "V6.0 RC4";
+
+async function c64LoadStaff(){
+  try{
+    if(typeof db === "undefined" || !db?.from) throw new Error("db not ready");
+    const {data,error} = await db.from("staff_members").select("*").eq("active",true).order("sort_order",{ascending:true});
+    if(error) throw error;
+    window.c64Staff = (data || []).filter(s => s.type !== "美甲" && !/美甲|曼曼/.test(String(s.name||"")));
+  }catch(e){
+    window.c64Staff = [{name:"雅潔老師"},{name:"巧萱美容師"}];
+  }
+  return window.c64Staff;
+}
+
+async function c64LoadServices(){
+  try{
+    if(typeof db === "undefined" || !db?.from) throw new Error("db not ready");
+    const [catRes,itemRes] = await Promise.all([
+      db.from("service_categories").select("*").eq("active",true).order("sort_order",{ascending:true}),
+      db.from("service_items").select("*").eq("active",true).order("sort_order",{ascending:true})
+    ]);
+    if(catRes.error || itemRes.error) throw (catRes.error || itemRes.error);
+    window.c64Cats = (catRes.data || []).filter(c => !/美甲|曼曼/.test(String(c.name||"")));
+    window.c64Items = (itemRes.data || []).filter(i => !/美甲|曼曼/.test(String(i.name+i.category_name)));
+    return window.c64Cats.length > 0;
+  }catch(e){
+    console.warn("RC4 前台療程資料讀取失敗，保留原本資料", e);
+    window.c64Cats = [];
+    window.c64Items = [];
+    return false;
+  }
+}
+
+function c64RenderCategories(){
+  const box = document.getElementById("categoryButtons");
+  if(!box || !window.c64Cats?.length) return false;
+  box.innerHTML = "";
+  window.c64Cats.forEach(cat => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = cat.name;
+    btn.onclick = () => c64SelectCategory(cat.name, btn);
+    box.appendChild(btn);
+  });
+  return true;
+}
+
+function c64SelectCategory(catName, btn){
+  const box = document.getElementById("categoryButtons");
+  if(box) Array.from(box.children).forEach(b => b.classList.toggle("active", b === btn || b.textContent === catName));
+  const listBox = document.getElementById("serviceList");
+  if(!listBox) return;
+  listBox.innerHTML = "";
+  listBox.className = "service-list";
+
+  const list = (window.c64Items || []).filter(i => i.category_name === catName && i.active !== false);
+  if(!list.length){
+    listBox.innerHTML = `<p class="muted">此類別目前沒有療程。</p>`;
+    return;
+  }
+
+  list.forEach(svc => {
+    const div = document.createElement("div");
+    div.className = "service-item";
+    div.innerHTML = `${svc.name}<small>${Number(svc.duration||0)} 分鐘${Number(svc.price||0)>0 ? "｜NT$ "+Number(svc.price).toLocaleString("zh-TW") : ""}</small>`;
+    div.onclick = () => {
+      const staff = svc.default_staff || (window.c64Staff?.[0]?.name) || "不指定";
+      const item = {
+        name: svc.name,
+        category: svc.category_name,
+        duration: Number(svc.duration || 60),
+        price: Number(svc.price || 0),
+        salary_type: svc.salary_type || "30",
+        fixed_salary: Number(svc.fixed_salary || 0),
+        service_item_id: svc.id || null,
+        therapist: staff,
+        cartId: Date.now() + Math.random()
+      };
+      if(typeof addToCart === "function") addToCart(item);
+    };
+    listBox.appendChild(div);
+  });
+}
+
+window.renderTherapistSelect = function(item){
+  const staff = (window.c64Staff && window.c64Staff.length ? window.c64Staff.map(s => s.name) : ["雅潔老師","巧萱美容師"]).filter(n => !/美甲|曼曼/.test(String(n)));
+  const options = staff.map(t => `<option value="${t}" ${item.therapist===t?"selected":""}>${t}</option>`).join("");
+  return `<div class="field" style="margin-top:8px;margin-bottom:0;">
+    <label>服務人員</label>
+    <select onchange="changeItemTherapist('${item.cartId}', this.value)">${options}</select>
+  </div>`;
+};
+
+async function c64InitFront(){
+  await c64LoadStaff();
+  const ok = await c64LoadServices();
+  if(ok) c64RenderCategories();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(c64InitFront, 700);
+  setTimeout(c64InitFront, 1800);
+});

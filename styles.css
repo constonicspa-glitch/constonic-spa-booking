@@ -448,3 +448,28 @@ button,.primary{
   color:#8a6d34;
   font-size:13px;
 }
+
+
+/* CONSTONIC V6.0 RC4 */
+.c64-tech-row{
+  grid-template-columns:1.25fr minmax(150px,.9fr) minmax(130px,.8fr) minmax(150px,.8fr) !important;
+  gap:14px !important;
+  align-items:end;
+}
+.c64-tech-row input[type="number"],
+#techAmount_0,#techAmount_1,#techAmount_2,#techAmount_3,#techAmount_4,#techAmount_5{
+  min-width:150px !important;
+  font-size:18px !important;
+  padding:12px 14px !important;
+}
+.c64-edit-btn{
+  margin-right:8px;
+}
+@media(max-width:900px){
+  .c64-tech-row{
+    grid-template-columns:1fr !important;
+  }
+  .c64-tech-row input[type="number"]{
+    width:100% !important;
+  }
+}

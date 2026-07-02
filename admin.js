@@ -1875,3 +1875,199 @@ document.addEventListener("change", e=>{
 });
 document.addEventListener("click", ()=>setTimeout(rc3ApplyCheckoutTotals,300));
 document.addEventListener("DOMContentLoaded", ()=>setTimeout(rc3ApplyCheckoutTotals,1200));
+
+
+/* CONSTONIC ADMIN V6.0 RC4
+   修正：
+   - 後台新增療程後，預約明細的技術服務自動同步新增薪資列
+   - 技術金額欄位放大
+   - 療程管理增加編輯
+   - 新增人員/療程後前後台連動更穩定
+*/
+window.CONSTONIC_ADMIN_VERSION = "V6.0 RC4";
+
+function c64RateOptions(rate){
+  return `<option value="30" ${String(rate)==="30"?"selected":""}>30%</option>
+          <option value="40" ${String(rate)==="40"?"selected":""}>40%</option>
+          <option value="fixed" ${String(rate)==="fixed"?"selected":""}>固定薪資</option>`;
+}
+
+function c64FindBookingInModal(){
+  const title = document.querySelector(".modal h2,.modal-card h2,.v3-modal-header h2")?.textContent || "";
+  try{
+    return (window.currentBookings || []).find(b => title.includes(b.customer_name || "") && title.includes(b.slot || ""));
+  }catch(e){ return null; }
+}
+
+function c64SyncTechRowsFromBookingItems(){
+  const techBox = document.getElementById("techRows") || document.getElementById("v2TechRows");
+  if(!techBox) return;
+  const booking = c64FindBookingInModal();
+  const rowsNow = Array.from(techBox.querySelectorAll(".tech-row,.v3-tech-row"));
+  const itemRows = Array.from(document.querySelectorAll("#editItemsBox .edit-item-row,#v31ItemRows .v31-item-row"));
+  let items = [];
+
+  if(itemRows.length){
+    items = itemRows.map((row,idx)=>{
+      const inputs = row.querySelectorAll("input");
+      return {
+        name: inputs[0]?.value || rowsNow[idx]?.querySelector("input")?.value || "",
+        price: Number(rowsNow[idx]?.querySelector('input[id*="Amount"], input[type="number"]')?.value || 0),
+        salary_type: rowsNow[idx]?.querySelector('select[id*="Rate"], select')?.value || "30",
+        fixed_salary: Number(rowsNow[idx]?.querySelector('input[id*="fixed"], input[id*="Fixed"]')?.value || 0)
+      };
+    }).filter(i=>i.name);
+  }else if(booking?.items?.length){
+    items = booking.items.map((i,idx)=>({
+      name:i.name || "",
+      price:Number(i.price || rowsNow[idx]?.querySelector('input[id*="Amount"], input[type="number"]')?.value || 0),
+      salary_type:i.salary_type || rowsNow[idx]?.querySelector('select[id*="Rate"], select')?.value || "30",
+      fixed_salary:Number(i.fixed_salary || 0)
+    }));
+  }else return;
+
+  if(rowsNow.length === items.length) return;
+
+  const old = rowsNow.map((row,idx)=>({
+    amount:Number(row.querySelector('input[id*="Amount"], input[type="number"]')?.value || 0),
+    rate:row.querySelector('select[id*="Rate"], select')?.value || "30",
+    fixed:Number(row.querySelector('input[id*="fixed"], input[id*="Fixed"]')?.value || 0)
+  }));
+
+  techBox.dataset.count = items.length;
+  techBox.innerHTML = items.map((item,idx)=>{
+    const amount = old[idx]?.amount || item.price || 0;
+    const rate = old[idx]?.rate || item.salary_type || "30";
+    const fixed = old[idx]?.fixed || item.fixed_salary || 0;
+    return `<div class="tech-row c64-tech-row">
+      <div class="field"><label>項目</label><input id="techName_${idx}" value="${escapeHtml(item.name)}"></div>
+      <div class="field"><label>技術金額</label><input id="techAmount_${idx}" type="number" min="0" value="${amount}" oninput="c64RecalcAll()"></div>
+      <div class="field"><label>薪資方式</label><select id="techRate_${idx}" onchange="c64ToggleFixed(${idx}); c64RecalcAll();">${c64RateOptions(rate)}</select></div>
+      <div class="field c64-fixed-field" id="fixedSalaryField_${idx}" style="${rate==='fixed'?'':'display:none'}"><label>固定薪資</label><input id="fixedSalary_${idx}" type="number" min="0" value="${fixed}" oninput="c64RecalcAll()"></div>
+    </div>`;
+  }).join("");
+  c64RecalcAll();
+}
+
+window.c64ToggleFixed = function(idx){
+  const rate = document.getElementById(`techRate_${idx}`)?.value;
+  const field = document.getElementById(`fixedSalaryField_${idx}`);
+  if(field) field.style.display = rate === "fixed" ? "" : "none";
+};
+
+function c64IsNonCash(method){
+  return ["扣儲值","扣課程","團購券","免收款"].includes(String(method||""));
+}
+
+window.c64RecalcAll = function(){
+  const method = document.getElementById("paymentMethod")?.value || document.getElementById("v2PaymentMethod")?.value || "現金";
+  let techReceived=0, tech30=0, tech40=0, fixed=0;
+  document.querySelectorAll("#techRows .tech-row,#v2TechRows .v3-tech-row").forEach((row,idx)=>{
+    const amount = Number(document.getElementById(`techAmount_${idx}`)?.value || document.getElementById(`v2TechAmount_${idx}`)?.value || 0);
+    const rate = document.getElementById(`techRate_${idx}`)?.value || document.getElementById(`v2TechRate_${idx}`)?.value || "30";
+    const fixedVal = Number(document.getElementById(`fixedSalary_${idx}`)?.value || 0);
+    if(!c64IsNonCash(method)) techReceived += amount;
+    if(rate==="30") tech30 += Math.round(amount*.3);
+    if(rate==="40") tech40 += Math.round(amount*.4);
+    if(rate==="fixed") fixed += fixedVal || amount;
+  });
+  const product = Number(document.getElementById("productAmount")?.value || document.getElementById("v2ProductAmount")?.value || 0);
+  const course = Number(document.getElementById("courseAmount")?.value || document.getElementById("v2CourseAmount")?.value || 0);
+  const stored = Number(document.getElementById("storedValueAmount")?.value || document.getElementById("v2StoredValueAmount")?.value || 0);
+  const totalReceived = techReceived + product + course + stored;
+  const totalInput = document.getElementById("totalReceived") || document.getElementById("v2TotalReceived");
+  if(totalInput){ totalInput.value = totalReceived; totalInput.readOnly = true; }
+  const set = (id,val)=>{ const el=document.getElementById(id); if(el) el.textContent="NT$ "+Number(val||0).toLocaleString("zh-TW"); };
+  set("salary30",tech30); set("salary40",tech40); set("salaryFixed",fixed);
+  set("salaryProduct",Math.round(product*.1)); set("salaryCourse",Math.round((course+stored)*.02));
+  set("salaryTotal",tech30+tech40+fixed+Math.round(product*.1)+Math.round((course+stored)*.02));
+};
+
+function c64PatchCheckoutOnOpen(){
+  c64SyncTechRowsFromBookingItems();
+  document.querySelectorAll("#editItemsBox input,#v31ItemRows input,#editItemsBox select,#v31ItemRows select").forEach(el=>{
+    if(el.dataset.c64Bound) return;
+    el.dataset.c64Bound="1";
+    el.addEventListener("input",()=>setTimeout(c64SyncTechRowsFromBookingItems,100));
+    el.addEventListener("change",()=>setTimeout(c64SyncTechRowsFromBookingItems,100));
+  });
+  document.querySelectorAll("#techRows input,#techRows select,#v2TechRows input,#v2TechRows select,#paymentMethod,#v2PaymentMethod").forEach(el=>{
+    if(el.dataset.c64CalcBound) return;
+    el.dataset.c64CalcBound="1";
+    el.addEventListener("input",c64RecalcAll);
+    el.addEventListener("change",c64RecalcAll);
+  });
+}
+
+/* 療程編輯 */
+window.c64EditServiceItem = async function(id){
+  const {data,error} = await db.from("service_items").select("*").eq("id",id).single();
+  if(error || !data){ alert("讀取療程失敗"); return; }
+  window.c64EditingServiceId = id;
+  const sel = document.getElementById("serviceCategorySelect");
+  if(sel) sel.value = data.category_id || "";
+  if(document.getElementById("serviceName")) document.getElementById("serviceName").value = data.name || "";
+  if(document.getElementById("serviceDuration")) document.getElementById("serviceDuration").value = data.duration || 60;
+  if(document.getElementById("servicePrice")) document.getElementById("servicePrice").value = data.price || 0;
+  if(document.getElementById("serviceDefaultStaff")) document.getElementById("serviceDefaultStaff").value = data.default_staff || "";
+  if(document.getElementById("serviceSalaryType")) document.getElementById("serviceSalaryType").value = data.salary_type || "30";
+  if(document.getElementById("serviceFixedSalary")) document.getElementById("serviceFixedSalary").value = data.fixed_salary || 0;
+  if(typeof c60ToggleServiceFixed === "function") c60ToggleServiceFixed();
+  const btn = document.getElementById("c64SaveServiceBtn") || document.querySelector("#c60ServicePanel .primary");
+  if(btn) btn.textContent = "儲存療程修改";
+  document.getElementById("serviceName")?.scrollIntoView({behavior:"smooth", block:"center"});
+};
+
+const c64OldSaveService = window.c60SaveServiceItem;
+window.c60SaveServiceItem = async function(){
+  if(window.c64EditingServiceId){
+    const sel = document.getElementById("serviceCategorySelect");
+    const payload = {
+      category_id: sel?.value,
+      category_name: sel?.selectedOptions?.[0]?.dataset?.name || sel?.selectedOptions?.[0]?.textContent || "",
+      name: document.getElementById("serviceName")?.value?.trim(),
+      duration:Number(document.getElementById("serviceDuration")?.value || 60),
+      price:Number(document.getElementById("servicePrice")?.value || 0),
+      default_staff:document.getElementById("serviceDefaultStaff")?.value || "",
+      salary_type:document.getElementById("serviceSalaryType")?.value || "30",
+      fixed_salary:Number(document.getElementById("serviceFixedSalary")?.value || 0)
+    };
+    if(!payload.name){ alert("請輸入療程名稱"); return; }
+    const {error} = await db.from("service_items").update(payload).eq("id", window.c64EditingServiceId);
+    if(error){ alert("儲存療程修改失敗"); console.error(error); return; }
+    window.c64EditingServiceId = null;
+    document.getElementById("serviceName").value = "";
+    const btn = document.getElementById("c64SaveServiceBtn") || document.querySelector("#c60ServicePanel .primary");
+    if(btn) btn.textContent = "＋新增療程";
+    if(typeof c60RefreshServicePanel === "function") await c60RefreshServicePanel();
+    alert("療程已修改，前台重新整理後同步。");
+    return;
+  }
+  if(typeof c64OldSaveService === "function") return c64OldSaveService.apply(this, arguments);
+};
+
+function c64PatchServiceListEditButtons(){
+  document.querySelectorAll("#c60ServiceList .c60-service-row").forEach(row=>{
+    if(row.querySelector(".c64-edit-btn")) return;
+    const delBtn = Array.from(row.querySelectorAll("button")).find(b=>/刪除/.test(b.textContent));
+    const onclick = delBtn?.getAttribute("onclick") || "";
+    const id = (onclick.match(/'([^']+)'/)||[])[1];
+    if(!id) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "c64-edit-btn";
+    btn.textContent = "編輯";
+    btn.onclick = () => c64EditServiceItem(id);
+    delBtn.parentElement?.insertBefore(btn, delBtn);
+  });
+  const saveBtn = document.querySelector("#c60ServicePanel .primary");
+  if(saveBtn && !saveBtn.id) saveBtn.id = "c64SaveServiceBtn";
+}
+
+const c64Obs = new MutationObserver(()=>{c64PatchCheckoutOnOpen();c64PatchServiceListEditButtons();});
+document.addEventListener("DOMContentLoaded",()=>{
+  c64Obs.observe(document.body,{childList:true,subtree:true});
+  setTimeout(c64PatchCheckoutOnOpen,800);
+  setTimeout(c64PatchServiceListEditButtons,1500);
+});
+document.addEventListener("click",()=>setTimeout(()=>{c64PatchCheckoutOnOpen();c64PatchServiceListEditButtons();},300));
