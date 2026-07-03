@@ -2599,3 +2599,37 @@ document.addEventListener("DOMContentLoaded", ()=>{
 document.addEventListener("click", ()=>{
   setTimeout(()=>{fp4PatchClickStability(); fp4CleanDuplicateEditButtons();}, 120);
 });
+
+
+/* CONSTONIC ADMIN V6.0 Final Patch 5 */
+window.CONSTONIC_FINAL_PATCH5 = "V6.0 Final Patch 5";
+
+function fp5RemoveExtraEditButtons(){
+  document.querySelectorAll(".c60-service-row,.fp1-service-row,.fp2-service-row").forEach(row=>{
+    const edits = Array.from(row.querySelectorAll("button")).filter(b=>/編輯/.test((b.textContent||"").trim()));
+    edits.forEach((b,i)=>{ if(i>0) b.remove(); });
+  });
+}
+function fp5InjectManualBookingNote(){
+  if(document.querySelector(".fp5-manual-note")) return;
+  const target = document.querySelector("#todayList, #workList, .admin-dashboard, main") || document.body;
+  const note = document.createElement("div");
+  note.className = "fp5-manual-note";
+  note.innerHTML = `
+    <strong>臨時客／補登提醒</strong>
+    <p>若現場臨時預約，請先在後台建立一筆預約；若隔天才發現，也可補登過去日期、時間、項目與美容師，再進入收銀計算薪資。</p>
+    <button type="button" onclick="fp5ScrollToManualBooking()">補登預約</button>
+  `;
+  target.prepend(note);
+}
+window.fp5ScrollToManualBooking = function(){
+  const el = Array.from(document.querySelectorAll("section.card,.card,h2,h3")).find(x=>/新增預約|建立預約|手動預約|預約/.test(x.textContent||""));
+  if(el) el.scrollIntoView({behavior:"smooth", block:"start"});
+  else alert("請到後台新增預約區，補登日期、時間、項目與美容師。");
+};
+document.addEventListener("DOMContentLoaded", ()=>{
+  setTimeout(()=>{fp5RemoveExtraEditButtons(); fp5InjectManualBookingNote();}, 800);
+  setTimeout(fp5RemoveExtraEditButtons, 1800);
+  setTimeout(fp5RemoveExtraEditButtons, 3200);
+});
+document.addEventListener("click", ()=>setTimeout(fp5RemoveExtraEditButtons, 120));

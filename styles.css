@@ -786,3 +786,38 @@ input[id*="Amount"]{
 .fp1-service-group[open] > summary{
   border-bottom:1px solid rgba(184,144,60,.22);
 }
+
+
+/* CONSTONIC V6.0 Final Patch 5 */
+.fp5-blocked{
+  opacity:.55 !important;
+  cursor:not-allowed !important;
+  background:#f1eadc !important;
+  color:#8a7a62 !important;
+}
+.fp5-manual-note{
+  margin:14px 0 18px;
+  padding:16px 18px;
+  border:1px solid rgba(184,144,60,.32);
+  border-radius:18px;
+  background:#fffaf0;
+  color:#143c32;
+}
+.fp5-manual-note strong{
+  display:block;
+  font-size:20px;
+  margin-bottom:6px;
+}
+.fp5-manual-note p{
+  margin:0 0 12px;
+  color:#6e6250;
+  line-height:1.6;
+}
+.fp5-manual-note button{
+  background:#b8903c;
+  color:white;
+  border:none;
+  border-radius:14px;
+  padding:10px 16px;
+  font-weight:800;
+}

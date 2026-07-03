@@ -2074,3 +2074,63 @@ function fp3FrontSelectCategory(catName, dbItems, btn){
   });
 }
 document.addEventListener("DOMContentLoaded",()=>setTimeout(fp3FrontLoadServices,1400));
+
+
+/* CONSTONIC FRONT V6.0 Final Patch 5 */
+window.CONSTONIC_FRONT_FINAL_PATCH5 = "V6.0 Final Patch 5";
+
+function fp5TimeToMinutes(t){
+  const m = String(t||"").match(/^(\d{1,2}):(\d{2})/);
+  return m ? Number(m[1])*60 + Number(m[2]) : null;
+}
+function fp5NormalizeDate(d){
+  return String(d||"").replaceAll("/","-");
+}
+function fp5ButtonTime(btn){
+  const m = (btn.textContent||"").match(/(\d{1,2}:\d{2})/);
+  return m ? m[1] : "";
+}
+async function fp5DisableTimeBlocks(){
+  try{
+    if(typeof db === "undefined" || !db?.from) return;
+    const dateInput = document.querySelector('input[type="date"], #bookingDate, #dateInput, #selectedDate');
+    const date = fp5NormalizeDate(dateInput?.value || window.selectedDate || "");
+    if(!date) return;
+
+    const {data,error} = await db.from("booking_blocks").select("*").eq("date", date);
+    if(error) throw error;
+    const blocks = (data || []).filter(b => b.start_time && b.end_time);
+    if(!blocks.length) return;
+
+    const selectedStaffText = Array.from(document.querySelectorAll("select"))
+      .map(s => s.options?.[s.selectedIndex]?.textContent || s.value || "")
+      .join(" ");
+
+    document.querySelectorAll("button, .time-slot, .slot-btn").forEach(btn=>{
+      const t = fp5ButtonTime(btn);
+      if(!t || btn.classList.contains("fp5-blocked")) return;
+      const tm = fp5TimeToMinutes(t);
+      const blocked = blocks.some(b=>{
+        const s = fp5TimeToMinutes(b.start_time);
+        const e = fp5TimeToMinutes(b.end_time);
+        const who = b.therapist || b.staff_name || b.staff || "全店";
+        const targetOK = who === "全店" || selectedStaffText.includes(who);
+        return targetOK && tm !== null && s !== null && e !== null && tm >= s && tm < e;
+      });
+      if(blocked){
+        btn.disabled = true;
+        btn.classList.add("disabled","booked","fp5-blocked");
+        btn.textContent = t + " 已滿";
+        btn.title = "此時段店家暫停預約";
+        btn.onclick = null;
+      }
+    });
+  }catch(e){ console.warn("時段休息封鎖失敗", e); }
+}
+document.addEventListener("DOMContentLoaded", ()=>{
+  setTimeout(fp5DisableTimeBlocks, 600);
+  setTimeout(fp5DisableTimeBlocks, 1500);
+  setTimeout(fp5DisableTimeBlocks, 2800);
+});
+document.addEventListener("change", ()=>setTimeout(fp5DisableTimeBlocks, 500));
+document.addEventListener("click", ()=>setTimeout(fp5DisableTimeBlocks, 500));
