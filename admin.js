@@ -2633,3 +2633,240 @@ document.addEventListener("DOMContentLoaded", ()=>{
   setTimeout(fp5RemoveExtraEditButtons, 3200);
 });
 document.addEventListener("click", ()=>setTimeout(fp5RemoveExtraEditButtons, 120));
+
+
+/* CONSTONIC ADMIN V6.0 Final Patch 6
+   權限管理：
+   - 不修改 bookings
+   - 預約表所有人都可看、可協助修改
+   - 美容師隱藏薪資/報表/設定敏感區
+   - 老闆可看全部
+*/
+window.CONSTONIC_FINAL_PATCH6 = "V6.0 Final Patch 6";
+
+window.fp6CurrentUser = null;
+window.fp6CurrentRole = null;
+
+function fp6DefaultPermission(){
+  return {
+    username:"owner",
+    display_name:"老闆/管理者",
+    role:"owner",
+    staff_name:"雅潔老師",
+    can_view_all_bookings:true,
+    can_edit_bookings:true,
+    can_view_salary:true,
+    can_view_reports:true,
+    can_manage_settings:true
+  };
+}
+
+async function fp6LoadPermission(){
+  try{
+    if(typeof db === "undefined" || !db?.from) return fp6DefaultPermission();
+
+    const saved = localStorage.getItem("constonic_current_username") || "owner";
+    let {data,error} = await db.from("staff_permissions").select("*").eq("username", saved).eq("active", true).maybeSingle();
+
+    if(error || !data){
+      const res = await db.from("staff_permissions").select("*").eq("username", "owner").maybeSingle();
+      data = res.data || fp6DefaultPermission();
+    }
+
+    window.fp6CurrentUser = data;
+    window.fp6CurrentRole = data.role || "therapist";
+    return data;
+  }catch(e){
+    console.warn("權限讀取失敗，使用管理者模式", e);
+    return fp6DefaultPermission();
+  }
+}
+
+function fp6IsOwner(){
+  return window.fp6CurrentUser?.role === "owner" || window.fp6CurrentUser?.can_view_salary === true;
+}
+
+function fp6SensitiveText(el){
+  const text = (el.textContent || "").replace(/\s+/g, "");
+  return /薪資|抽成|員工薪資|本月薪資|固定薪資|技術30|技術40|商品10|課程.*2|報表|營收|成本|利潤|系統設定|人員管理|療程管理|預約開放設定/.test(text);
+}
+
+function fp6ApplyPermissionUI(){
+  const user = window.fp6CurrentUser || fp6DefaultPermission();
+
+  document.body.classList.toggle("fp6-therapist-mode", !fp6IsOwner());
+  document.body.classList.toggle("fp6-owner-mode", fp6IsOwner());
+
+  if(!fp6IsOwner()){
+    document.querySelectorAll("section.card,.card,.panel,details").forEach(el=>{
+      if(fp6SensitiveText(el)){
+        el.classList.add("fp6-hidden-sensitive");
+      }
+    });
+
+    document.querySelectorAll(".salary-card,.cashier-panel,#salaryCard,#c60ServicePanel,#c60BookingSettings,.fp2-category-manager,.fp1-category-editor").forEach(el=>{
+      el.classList.add("fp6-hidden-sensitive");
+    });
+  }else{
+    document.querySelectorAll(".fp6-hidden-sensitive").forEach(el=>el.classList.remove("fp6-hidden-sensitive"));
+  }
+
+  fp6InjectPermissionBar(user);
+}
+
+function fp6InjectPermissionBar(user){
+  let bar = document.getElementById("fp6PermissionBar");
+  if(!bar){
+    bar = document.createElement("div");
+    bar.id = "fp6PermissionBar";
+    bar.className = "fp6-permission-bar";
+    const target = document.querySelector("main") || document.body;
+    target.prepend(bar);
+  }
+
+  const roleText = fp6IsOwner() ? "管理者模式" : "美容師模式";
+  bar.innerHTML = `
+    <div>
+      <strong>${escapeHtml(user.display_name || user.username || "使用者")}</strong>
+      <span>${roleText}｜可查看與修改預約；薪資資料依權限顯示</span>
+    </div>
+    <button type="button" onclick="fp6OpenRoleSwitcher()">切換使用者</button>
+  `;
+}
+
+window.fp6OpenRoleSwitcher = async function(){
+  try{
+    const {data,error} = await db.from("staff_permissions").select("*").eq("active", true).order("created_at",{ascending:true});
+    if(error) throw error;
+
+    const names = (data || []).map((u,i)=>`${i+1}. ${u.display_name}（${u.role === "owner" ? "管理者" : "美容師"}）`).join("\n");
+    const choice = prompt("請輸入要切換的編號：\n" + names, "1");
+    const idx = Number(choice) - 1;
+    if(!data[idx]) return;
+
+    localStorage.setItem("constonic_current_username", data[idx].username);
+    alert("已切換為：" + data[idx].display_name);
+    location.reload();
+  }catch(e){
+    alert("讀取使用者失敗，請確認已執行 Patch 6 SQL。");
+    console.error(e);
+  }
+};
+
+function fp6InjectPermissionManager(){
+  if(!fp6IsOwner()) return;
+  if(document.getElementById("fp6PermissionManager")) return;
+
+  const main = document.querySelector("main") || document.body;
+  const card = document.createElement("section");
+  card.id = "fp6PermissionManager";
+  card.className = "card fp6-permission-manager";
+  card.innerHTML = `
+    <h2>權限管理</h2>
+    <p class="hint">美容師可看全部預約並協助修改，但看不到薪資、抽成、報表與設定。</p>
+    <div class="fp6-form-grid">
+      <label>帳號代號 <input id="fp6Username" placeholder="例如 amy"></label>
+      <label>顯示名稱 <input id="fp6DisplayName" placeholder="例如 小美美容師"></label>
+      <label>對應人員 <input id="fp6StaffName" placeholder="例如 小美美容師"></label>
+      <label>角色
+        <select id="fp6Role">
+          <option value="therapist">美容師</option>
+          <option value="owner">管理者</option>
+        </select>
+      </label>
+    </div>
+    <button type="button" onclick="fp6AddPermissionUser()">新增使用者</button>
+    <div id="fp6PermissionList"></div>
+  `;
+
+  const settings = Array.from(document.querySelectorAll("section.card,.card")).find(el=>/人員管理|系統設定|預約開放/.test(el.textContent||""));
+  if(settings) settings.insertAdjacentElement("afterend", card);
+  else main.appendChild(card);
+
+  fp6RenderPermissionList();
+}
+
+async function fp6RenderPermissionList(){
+  const box = document.getElementById("fp6PermissionList");
+  if(!box) return;
+  try{
+    const {data,error} = await db.from("staff_permissions").select("*").order("created_at",{ascending:true});
+    if(error) throw error;
+
+    box.innerHTML = (data || []).map(u=>`
+      <div class="fp6-user-row">
+        <div>
+          <strong>${escapeHtml(u.display_name)}</strong>
+          <span>${escapeHtml(u.username)}｜${u.role === "owner" ? "管理者" : "美容師"}｜${u.active ? "啟用" : "停用"}</span>
+        </div>
+        <button type="button" onclick="fp6ToggleUser('${u.id}', ${u.active ? "false" : "true"})">${u.active ? "停用" : "啟用"}</button>
+        <button type="button" onclick="fp6DeleteUser('${u.id}')">刪除</button>
+      </div>
+    `).join("");
+  }catch(e){
+    box.innerHTML = `<p class="muted">請先執行 Patch 6 SQL。</p>`;
+  }
+}
+
+window.fp6AddPermissionUser = async function(){
+  const username = document.getElementById("fp6Username")?.value?.trim();
+  const display_name = document.getElementById("fp6DisplayName")?.value?.trim();
+  const staff_name = document.getElementById("fp6StaffName")?.value?.trim();
+  const role = document.getElementById("fp6Role")?.value || "therapist";
+  if(!username || !display_name){
+    alert("請填帳號代號與顯示名稱");
+    return;
+  }
+
+  const isOwner = role === "owner";
+  const payload = {
+    username,
+    display_name,
+    staff_name,
+    role,
+    active:true,
+    can_view_all_bookings:true,
+    can_edit_bookings:true,
+    can_view_salary:isOwner,
+    can_view_reports:isOwner,
+    can_manage_settings:isOwner
+  };
+
+  const {error} = await db.from("staff_permissions").insert(payload);
+  if(error){
+    alert("新增失敗，可能帳號代號已存在，或尚未執行 Patch 6 SQL。");
+    console.error(error);
+    return;
+  }
+
+  document.getElementById("fp6Username").value = "";
+  document.getElementById("fp6DisplayName").value = "";
+  document.getElementById("fp6StaffName").value = "";
+  await fp6RenderPermissionList();
+};
+
+window.fp6ToggleUser = async function(id, active){
+  const {error} = await db.from("staff_permissions").update({active}).eq("id",id);
+  if(error){ alert("更新失敗"); return; }
+  await fp6RenderPermissionList();
+};
+
+window.fp6DeleteUser = async function(id){
+  if(!confirm("確定刪除此權限使用者？不會刪除預約資料。")) return;
+  const {error} = await db.from("staff_permissions").delete().eq("id",id);
+  if(error){ alert("刪除失敗"); return; }
+  await fp6RenderPermissionList();
+};
+
+async function fp6Init(){
+  await fp6LoadPermission();
+  fp6ApplyPermissionUI();
+  setTimeout(fp6InjectPermissionManager, 800);
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  setTimeout(fp6Init, 800);
+  setTimeout(fp6ApplyPermissionUI, 2000);
+  setTimeout(fp6ApplyPermissionUI, 3500);
+});
+document.addEventListener("click", ()=>setTimeout(fp6ApplyPermissionUI, 250));
