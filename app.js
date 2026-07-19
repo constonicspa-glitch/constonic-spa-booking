@@ -2307,3 +2307,45 @@ document.addEventListener("submit", function(e){
   if(now - last < 8000){ e.preventDefault(); e.stopImmediatePropagation(); alert("預約正在送出，請不要重複點擊。"); return; }
   e.target.dataset.fp7LastSubmit = String(now);
 }, true);
+
+/* =========================================================
+   CONSTONIC FRONT V6.0 Final Patch 8
+   - 電腦/手機都清楚顯示雅潔老師身體指定費 +300
+   - 時段須知縮小並固定顯示於時間按鈕上方
+========================================================= */
+window.CONSTONIC_FRONT_FINAL_PATCH8 = "V6.0 Final Patch 8";
+
+function p8HasYajieBodyFee(){
+  try{
+    return Array.isArray(cart) && cart.some(i => i?.category === "身體舒壓" && i?.teacherFee !== false && i?.therapist === "雅潔老師");
+  }catch(e){ return false; }
+}
+function p8RenderTeacherFee(){
+  const target = document.getElementById("teacherFee");
+  if(!target) return;
+  const show = p8HasYajieBodyFee();
+  target.classList.toggle("p8-teacher-fee-active", show);
+  target.innerHTML = show ? '<strong>指定費提醒</strong><span>身體舒壓指定雅潔老師，本次加收 NT$ 300</span>' : '';
+}
+function p8MoveAvailabilityHint(){
+  const hint = document.getElementById("fp7AvailabilityHint");
+  const grid = document.querySelector("#slotList .slot-grid");
+  if(hint && grid && hint.nextElementSibling !== grid){ grid.insertAdjacentElement("beforebegin", hint); }
+  hint?.classList.add("p8-compact-hint");
+}
+const p8OldRenderCart = window.renderCart;
+if(typeof p8OldRenderCart === "function"){
+  window.renderCart = function(){
+    const result = p8OldRenderCart.apply(this, arguments);
+    setTimeout(()=>{ p8RenderTeacherFee(); }, 30);
+    return result;
+  };
+}
+document.addEventListener("change", ()=>setTimeout(p8RenderTeacherFee,50));
+document.addEventListener("click", ()=>setTimeout(()=>{p8RenderTeacherFee();p8MoveAvailabilityHint();},80));
+const p8Observer = new MutationObserver(()=>{ p8RenderTeacherFee(); p8MoveAvailabilityHint(); });
+document.addEventListener("DOMContentLoaded",()=>{
+  const root=document.getElementById("slotList")||document.body;
+  p8Observer.observe(root,{childList:true,subtree:true});
+  setTimeout(()=>{p8RenderTeacherFee();p8MoveAvailabilityHint();},500);
+});

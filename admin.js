@@ -2934,3 +2934,141 @@ window.dropBooking = async function(event,newSlot,newTherapist){
   const idx=currentBookings.findIndex(x=>x.id===id); if(idx>=0) currentBookings[idx]=data;
   await refreshAll();
 };
+
+/* =========================================================
+   CONSTONIC ADMIN V6.0 Final Patch 8
+   1. 完整臨時客／補登表單
+   2. 月曆式行事曆與整月查詢
+   3. 可操作的使用者切換視窗
+   不修改既有預約、薪資公式與客戶資料
+========================================================= */
+window.CONSTONIC_FINAL_PATCH8 = "V6.0 Final Patch 8";
+
+function p8AdminStaffNames(){
+  try{
+    if(typeof c50Staff === "function") return c50Staff();
+    const cached=JSON.parse(localStorage.getItem("constonic_staff_members")||"[]");
+    const names=cached.filter(s=>s?.active!==false&&!/美甲|曼曼/.test(String(s.name||""))).map(s=>s.name);
+    return names.length?names:["雅潔老師","巧萱美容師"];
+  }catch(e){return ["雅潔老師","巧萱美容師"];}
+}
+function p8AdminTimeToMin(v){const m=String(v||"").match(/^(\d{1,2}):(\d{2})$/);return m?Number(m[1])*60+Number(m[2]):null;}
+function p8AdminMonthRange(ym){const [y,m]=ym.split("-").map(Number);return{start:`${ym}-01`,end:`${ym}-${String(new Date(y,m,0).getDate()).padStart(2,"0")}`,days:new Date(y,m,0).getDate(),year:y,month:m};}
+function p8StaffDotClass(name){return name==="雅潔老師"?"p8-dot-yajie":name==="巧萱美容師"?"p8-dot-qiaoxuan":"p8-dot-other";}
+
+function p8InjectMainActions(){
+  if(document.getElementById("p8MainActions")) return;
+  const anchor=document.querySelector(".admin-toolbar-card .toolbar-top")||document.querySelector("#adminMain .card");
+  if(!anchor) return;
+  const box=document.createElement("div");
+  box.id="p8MainActions"; box.className="p8-main-actions";
+  box.innerHTML=`<button type="button" class="primary" onclick="p8OpenManualBooking()">＋ 臨時客補登</button><button type="button" onclick="p8ShowMonthCalendar()">月曆行事曆</button>`;
+  anchor.appendChild(box);
+}
+
+window.p8OpenManualBooking=function(){
+  let modal=document.getElementById("p8ManualModal");
+  if(!modal){
+    modal=document.createElement("div"); modal.id="p8ManualModal"; modal.className="modal hidden";
+    modal.innerHTML=`<div class="modal-content p8-manual-modal"><div class="modal-header"><div><p class="eyebrow">CONSTONIC ADMIN</p><h2>臨時客／補登預約</h2></div><button type="button" class="modal-close" onclick="p8CloseManualBooking()">×</button></div><div class="p8-manual-body">
+      <div class="form-grid">
+        <div class="field"><label>日期</label><input type="date" id="p8ManualDate"></div>
+        <div class="field"><label>時間</label><input type="time" id="p8ManualTime" step="1800"></div>
+        <div class="field"><label>客戶姓名</label><input id="p8ManualName" placeholder="必填"></div>
+        <div class="field"><label>電話</label><input id="p8ManualPhone" placeholder="可填手機"></div>
+        <div class="field"><label>服務人員</label><select id="p8ManualStaff"></select></div>
+        <div class="field"><label>狀態</label><select id="p8ManualStatus"><option value="confirmed">已確認</option><option value="completed">已完成／現場客</option><option value="pending">待確認</option></select></div>
+        <div class="field"><label>療程名稱</label><input id="p8ManualService" placeholder="例如：全身按摩"></div>
+        <div class="field"><label>療程分鐘</label><input type="number" id="p8ManualDuration" min="10" step="10" value="60"></div>
+      </div>
+      <div class="field"><label>備註</label><textarea id="p8ManualNote" rows="3" placeholder="臨時客、補登原因或特殊需求"></textarea></div>
+      <p id="p8ManualMessage" class="hint"></p>
+    </div><div class="modal-footer p8-manual-footer"><button type="button" onclick="p8CloseManualBooking()">取消</button><button type="button" class="primary" onclick="p8SaveManualBooking()">建立補登預約</button></div></div>`;
+    document.body.appendChild(modal);
+  }
+  const date=document.getElementById("date")?.value||todayISO();
+  $("p8ManualDate").value=date; $("p8ManualTime").value="10:00";
+  $("p8ManualStaff").innerHTML=p8AdminStaffNames().map(s=>`<option>${escapeHtml(s)}</option>`).join("");
+  $("p8ManualMessage").textContent="";
+  modal.classList.remove("hidden");
+};
+window.p8CloseManualBooking=function(){document.getElementById("p8ManualModal")?.classList.add("hidden");};
+window.p8SaveManualBooking=async function(){
+  const date=$("p8ManualDate")?.value, slot=$("p8ManualTime")?.value, name=$("p8ManualName")?.value.trim();
+  const phone=$("p8ManualPhone")?.value.trim()||"", staff=$("p8ManualStaff")?.value||"不指定";
+  const service=$("p8ManualService")?.value.trim(), duration=Number($("p8ManualDuration")?.value||0);
+  const status=$("p8ManualStatus")?.value||"confirmed", note=$("p8ManualNote")?.value.trim()||"";
+  if(!date||!slot||!name||!service||duration<=0){$("p8ManualMessage").textContent="請完整填寫日期、時間、姓名、療程與分鐘。";return;}
+  const start=p8AdminTimeToMin(slot), end=start+duration+(service.includes("身體")||/按摩|刮痧|滑罐/.test(service)?20:10);
+  const {data:rows,error:readError}=await db.from("bookings").select("*").eq("date",date).neq("status","cancelled");
+  if(readError){$("p8ManualMessage").textContent="無法檢查行事曆，請稍後再試。";return;}
+  const conflict=(rows||[]).some(b=>{
+    if(b.therapist!==staff) return false;
+    const bs=p8AdminTimeToMin(b.slot), be=bs+Number(b.total_block||b.service_minutes||0);
+    return start<be&&bs<end;
+  });
+  if(conflict&&!confirm("這位人員在該時段已有預約，仍要補登嗎？")) return;
+  const buffer=service.includes("身體")||/按摩|刮痧|滑罐/.test(service)?20:10;
+  const payload={date,slot,customer_name:name,phone,line_name:"",first_visit:"否",therapist:staff,status,note:note?`後台補登：${note}`:"後台臨時客補登",items:[{name:service,duration,therapist:staff}],service_minutes:duration,internal_buffer:buffer,total_block:duration+buffer};
+  const {error}=await db.from("bookings").insert(payload);
+  if(error){console.error(error);$("p8ManualMessage").textContent="建立失敗，請確認資料庫連線與權限。";return;}
+  p8CloseManualBooking();
+  if($("date")) $("date").value=date;
+  await refreshAll();
+  alert("補登預約已建立完成。");
+};
+window.fp5ScrollToManualBooking=window.p8OpenManualBooking;
+
+function p8InjectMonthCalendar(){
+  if(document.getElementById("p8MonthCalendarCard")) return;
+  const calendarCard=document.getElementById("calendarView")?.closest("section.card");
+  if(!calendarCard) return;
+  const card=document.createElement("section"); card.id="p8MonthCalendarCard"; card.className="card hidden";
+  card.innerHTML=`<div class="report-title-row"><div><h2>月曆行事曆</h2><p class="hint">日期格顯示時間與客戶姓名，點預約可看完整內容。</p></div><div class="p8-month-controls"><button type="button" onclick="p8ChangeMonth(-1)">◀</button><input type="month" id="p8MonthInput"><button type="button" onclick="p8ChangeMonth(1)">▶</button><button type="button" onclick="p8HideMonthCalendar()">回單日</button></div></div><div class="p8-calendar-legend"><span class="p8-dot-yajie">雅潔老師</span><span class="p8-dot-qiaoxuan">巧萱美容師</span><span class="p8-dot-other">其他人員</span></div><div id="p8MonthGrid" class="p8-month-grid"></div>`;
+  calendarCard.insertAdjacentElement("beforebegin",card);
+  $("p8MonthInput").addEventListener("change",p8RenderMonthCalendar);
+}
+window.p8ShowMonthCalendar=function(){
+  p8InjectMonthCalendar();
+  const ym=($("date")?.value||todayISO()).slice(0,7); $("p8MonthInput").value=ym;
+  document.getElementById("p8MonthCalendarCard")?.classList.remove("hidden");
+  document.getElementById("calendarView")?.closest("section.card")?.classList.add("hidden");
+  p8RenderMonthCalendar();
+};
+window.p8HideMonthCalendar=function(){document.getElementById("p8MonthCalendarCard")?.classList.add("hidden");document.getElementById("calendarView")?.closest("section.card")?.classList.remove("hidden");};
+window.p8ChangeMonth=function(delta){const input=$("p8MonthInput");if(!input)return;const [y,m]=input.value.split("-").map(Number);const d=new Date(y,m-1+delta,1);input.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;p8RenderMonthCalendar();};
+window.p8OpenDay=function(date){if($("date")){$("date").value=date;updateDateUI();}p8HideMonthCalendar();refreshAll();document.getElementById("calendarView")?.scrollIntoView({behavior:"smooth",block:"start"});};
+window.p8RenderMonthCalendar=async function(){
+  const ym=$("p8MonthInput")?.value;if(!ym)return;const box=$("p8MonthGrid");box.innerHTML="載入中...";
+  const range=p8AdminMonthRange(ym);const {data,error}=await db.from("bookings").select("*").gte("date",range.start).lte("date",range.end).neq("status","cancelled").order("date").order("slot");
+  if(error){box.innerHTML="讀取月曆失敗。";return;}
+  const groups={};(data||[]).forEach(b=>(groups[b.date]??=[]).push(b));
+  const firstDay=new Date(`${range.start}T00:00:00`).getDay();
+  let html=["日","一","二","三","四","五","六"].map(x=>`<div class="p8-week-head">${x}</div>`).join("");
+  for(let i=0;i<firstDay;i++)html+='<div class="p8-day p8-empty"></div>';
+  for(let day=1;day<=range.days;day++){
+    const date=`${ym}-${String(day).padStart(2,"0")}`, rows=groups[date]||[];
+    html+=`<div class="p8-day" onclick="p8OpenDay('${date}')"><div class="p8-day-number"><strong>${day}</strong><span>${rows.length?rows.length+'筆':''}</span></div><div class="p8-day-events">${rows.map(b=>`<button type="button" class="p8-event ${p8StaffDotClass(b.therapist)}" onclick="event.stopPropagation();openBookingModal('${escapeHtml(b.id)}')"><b>${escapeHtml(b.slot||'')}</b> ${escapeHtml(b.customer_name||'-')}</button>`).join("")}</div></div>`;
+  }
+  box.innerHTML=html;
+};
+
+/* 整月查詢按鈕直接顯示月曆 */
+const p8OldLoadQuery=window.c60LoadQuery;
+window.c60LoadQuery=async function(mode){if(mode==="month"){p8ShowMonthCalendar();return;}return p8OldLoadQuery?.apply(this,arguments);};
+
+window.fp6OpenRoleSwitcher=async function(){
+  let users=[];
+  try{const {data}=await db.from("staff_permissions").select("*").eq("active",true).order("created_at");users=data||[];}catch(e){}
+  if(!users.length){
+    users=(cfg.STAFF_ACCOUNTS||[]).filter(a=>!/曼曼|美甲/.test(a.displayName||"")).map(a=>({username:a.username,display_name:a.displayName,role:a.role||"therapist",staff_name:a.displayName}));
+  }
+  let modal=document.getElementById("p8UserSwitchModal");
+  if(!modal){modal=document.createElement("div");modal.id="p8UserSwitchModal";modal.className="modal hidden";document.body.appendChild(modal);}
+  modal.innerHTML=`<div class="modal-content p8-user-modal"><div class="modal-header"><h2>切換使用者</h2><button class="modal-close" onclick="document.getElementById('p8UserSwitchModal').classList.add('hidden')">×</button></div><div class="p8-user-list">${users.map(u=>`<button type="button" onclick="p8ChooseUser('${escapeHtml(u.username)}','${escapeHtml(u.display_name||u.username)}')"><strong>${escapeHtml(u.display_name||u.username)}</strong><span>${u.role==='owner'?'管理者模式':'美容師模式'}</span></button>`).join("")||'<p>目前沒有可切換的使用者。</p>'}</div></div>`;
+  modal.classList.remove("hidden");
+};
+window.p8ChooseUser=function(username,display){localStorage.setItem("constonic_current_username",username);const current=(cfg.STAFF_ACCOUNTS||[]).find(a=>a.username===username);if(current)sessionStorage.setItem("constonicStaffUser",JSON.stringify({username:current.username,displayName:current.displayName,role:current.role}));alert(`已切換為：${display}`);location.reload();};
+
+function p8Init(){p8InjectMainActions();p8InjectMonthCalendar();}
+document.addEventListener("DOMContentLoaded",()=>setTimeout(p8Init,1400));
