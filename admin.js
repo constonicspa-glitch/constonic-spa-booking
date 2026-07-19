@@ -2870,3 +2870,67 @@ document.addEventListener("DOMContentLoaded", ()=>{
   setTimeout(fp6ApplyPermissionUI, 3500);
 });
 document.addEventListener("click", ()=>setTimeout(fp6ApplyPermissionUI, 250));
+
+/* =========================================================
+   CONSTONIC ADMIN V6.0 Final Patch 7 - Stability Fix
+   - 待確認與一般預約可修改日期 / 時間 / 主要美容師
+   - 拖曳與手動修改前先檢查衝堂
+   - 修改成功後立即更新本機快取與畫面
+   注意：不更動薪資公式、不批次修改既有 bookings
+========================================================= */
+window.CONSTONIC_FINAL_PATCH7 = "V6.0 Final Patch 7 Stability Fix";
+
+function ap7TimeToMin(value){
+  const m=String(value||"").match(/^(\d{1,2}):(\d{2})$/);
+  return m ? Number(m[1])*60+Number(m[2]) : null;
+}
+function ap7EndMin(b){
+  const start=ap7TimeToMin(b.slot);
+  return start===null ? null : start+Number(b.total_block||b.service_minutes||0);
+}
+function ap7Overlap(a,b,c,d){ return a<d && c<b; }
+async function ap7Conflict(id,date,slot,therapist,totalBlock){
+  const start=ap7TimeToMin(slot);
+  if(start===null) return "時間格式不正確";
+  const end=start+Number(totalBlock||0);
+  const {data,error}=await db.from("bookings").select("id,slot,therapist,total_block,service_minutes,status,customer_name").eq("date",date).neq("status","cancelled");
+  if(error) return "無法檢查時段，請稍後再試";
+  const hit=(data||[]).find(b=>b.id!==id && (b.therapist===therapist || b.therapist==="不指定" || therapist==="不指定") && ap7Overlap(start,end,ap7TimeToMin(b.slot),ap7EndMin(b)));
+  return hit ? `此時段與「${hit.customer_name||"其他客人"}」的預約衝突` : "";
+}
+function ap7EditPanel(b){
+  const staff=(typeof c50Staff==="function"?c50Staff():["雅潔老師","巧萱美容師"]).filter(Boolean);
+  if(b.therapist && !staff.includes(b.therapist)) staff.push(b.therapist);
+  return `<div class="panel ap7-schedule-panel"><h3>修改日期／時間／人員</h3><p class="hint">儲存前會檢查美容師時段是否衝突，不會修改收銀與薪資資料。</p><div class="form-grid compact"><div class="field"><label>日期</label><input id="ap7Date" type="date" value="${escapeHtml(b.date||"")}"></div><div class="field"><label>開始時間</label><input id="ap7Slot" type="time" step="1800" value="${escapeHtml(b.slot||"")}"></div><div class="field"><label>主要美容師</label><select id="ap7Therapist">${staff.map(s=>`<option ${s===b.therapist?"selected":""}>${escapeHtml(s)}</option>`).join("")}</select></div></div><button type="button" class="primary" onclick="ap7SaveSchedule('${escapeHtml(b.id)}')">儲存日期／時間／人員</button></div>`;
+}
+const ap7OriginalRenderDetailPanel = window.renderDetailPanel;
+window.renderDetailPanel = function(b){
+  const original = typeof ap7OriginalRenderDetailPanel === "function" ? ap7OriginalRenderDetailPanel(b) : "";
+  return original + ap7EditPanel(b);
+};
+window.ap7SaveSchedule = async function(id){
+  const b=await fetchBooking(id); if(!b) return;
+  const date=$("ap7Date")?.value;
+  const slot=$("ap7Slot")?.value;
+  const therapist=$("ap7Therapist")?.value;
+  if(!date||!slot||!therapist){ alert("請完整填寫日期、時間與美容師"); return; }
+  const conflict=await ap7Conflict(id,date,slot,therapist,b.total_block||b.service_minutes||0);
+  if(conflict){ alert(conflict); return; }
+  const {data,error}=await db.from("bookings").update({date,slot,therapist}).eq("id",id).select().single();
+  if(error){ alert("修改失敗"); console.error(error); return; }
+  const idx=currentBookings.findIndex(x=>x.id===id); if(idx>=0) currentBookings[idx]=data;
+  alert("預約日期、時間與人員已更新"); closeBookingModal(); await refreshAll();
+};
+
+window.dropBooking = async function(event,newSlot,newTherapist){
+  event.preventDefault(); event.currentTarget.classList.remove("drag-over");
+  const id=event.dataTransfer.getData("text/plain");
+  const b=currentBookings.find(x=>x.id===id); if(!b) return;
+  const conflict=await ap7Conflict(id,b.date,newSlot,newTherapist,b.total_block||b.service_minutes||0);
+  if(conflict){ alert(conflict); return; }
+  if(!confirm(`確認將「${b.customer_name}」改到 ${newSlot}｜${newTherapist} 嗎？`)) return;
+  const {data,error}=await db.from("bookings").update({slot:newSlot,therapist:newTherapist}).eq("id",id).select().single();
+  if(error){ alert("修改時間失敗"); console.error(error); return; }
+  const idx=currentBookings.findIndex(x=>x.id===id); if(idx>=0) currentBookings[idx]=data;
+  await refreshAll();
+};

@@ -897,3 +897,6 @@ input[id*="Amount"]{
     grid-template-columns:1fr;
   }
 }
+
+/* CONSTONIC V6.0 Final Patch 7 - Stability Fix */
+.fp7-availability-hint{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;margin-bottom:14px;padding:14px 16px;border:1px solid rgba(184,144,60,.3);border-radius:16px;background:#fff7e6;color:#143c32}.fp7-availability-hint span{color:#7c6538}.fp7-slot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}.fp7-slot{min-height:60px;font-size:19px}.ap7-schedule-panel{border-color:rgba(184,144,60,.4)!important;background:#fff9ed!important}@media(max-width:640px){.fp7-slot-grid{grid-template-columns:repeat(2,1fr)}.fp7-availability-hint{display:grid}.fp7-slot{font-size:17px}}

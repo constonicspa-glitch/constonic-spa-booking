@@ -2134,3 +2134,176 @@ document.addEventListener("DOMContentLoaded", ()=>{
 });
 document.addEventListener("change", ()=>setTimeout(fp5DisableTimeBlocks, 500));
 document.addEventListener("click", ()=>setTimeout(fp5DisableTimeBlocks, 500));
+
+/* =========================================================
+   CONSTONIC FRONT V6.0 Final Patch 7 - Stability Fix
+   - 統一最後生效的時段邏輯
+   - 營業時間 / 店休 / 個人休假 / 分時休息 / 整理時間 / 衝堂
+   - 顯示本日可安排時間提示
+   - 防止短時間重複送出
+   注意：只讀取 bookings，不修改既有預約資料
+========================================================= */
+window.CONSTONIC_FRONT_FINAL_PATCH7 = "V6.0 Final Patch 7 Stability Fix";
+
+function fp7TimeToMin(value){
+  const m = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+function fp7MinToTime(value){
+  return `${String(Math.floor(value / 60)).padStart(2,"0")}:${String(value % 60).padStart(2,"0")}`;
+}
+function fp7DayHours(date){
+  const day = new Date(`${date}T00:00:00`).getDay();
+  if(day === 0) return {closed:true, open:0, close:0};
+  return {closed:false, open:600, close:day === 6 ? 1080 : 1200};
+}
+function fp7Items(){
+  try { return Array.isArray(cart) ? cart.filter(i => !/美甲|曼曼/.test(`${i?.name||""} ${i?.category||""} ${i?.therapist||""}`)) : []; }
+  catch(e){ return []; }
+}
+function fp7Buffer(item){
+  if(item?.category === "身體舒壓") return 20;
+  if(item?.category === "臉部保養") return 10;
+  return 0;
+}
+function fp7NeedSegments(start){
+  const result = [];
+  let cursor = start;
+  fp7Items().forEach(item => {
+    const duration = Number(item.duration || 0);
+    if(duration <= 0) return;
+    const buffer = fp7Buffer(item);
+    result.push({
+      therapist:item.therapist || "不指定",
+      start:cursor,
+      serviceEnd:cursor + duration,
+      end:cursor + duration + buffer
+    });
+    cursor += duration;
+  });
+  return result;
+}
+function fp7BookingSegments(bookings){
+  const result = [];
+  (bookings || []).forEach(b => {
+    if(b.status === "cancelled") return;
+    const base = fp7TimeToMin(b.slot);
+    if(base === null) return;
+    const items = Array.isArray(b.items) ? b.items : [];
+    if(!items.length){
+      result.push({therapist:b.therapist || "不指定", start:base, end:base + Number(b.total_block || b.service_minutes || 0)});
+      return;
+    }
+    let cursor = base;
+    items.forEach((item, index) => {
+      const duration = Number(item.duration || 0);
+      if(duration <= 0) return;
+      const ownBuffer = Number(item.internal_buffer ?? fp7Buffer(item));
+      const isLast = index === items.length - 1;
+      const savedBuffer = isLast ? Number(b.internal_buffer || ownBuffer || 0) : ownBuffer;
+      result.push({therapist:item.therapist || b.therapist || "不指定", start:cursor, end:cursor + duration + savedBuffer});
+      cursor += duration;
+    });
+  });
+  return result;
+}
+function fp7Overlap(aStart,aEnd,bStart,bEnd){ return aStart < bEnd && bStart < aEnd; }
+function fp7AllDayClosed(blocks){
+  return (blocks || []).some(b => b.all_day !== false && ["全店","全日","全店休"].includes(b.therapist || "全店"));
+}
+function fp7BlockedBySchedule(blocks, segment){
+  return (blocks || []).some(b => {
+    const target = b.therapist || "全店";
+    if(target !== "全店" && target !== segment.therapist) return false;
+    if(b.all_day !== false || !b.start_time || !b.end_time) return true;
+    const start = fp7TimeToMin(b.start_time), end = fp7TimeToMin(b.end_time);
+    return start !== null && end !== null && fp7Overlap(segment.start, segment.end, start, end);
+  });
+}
+function fp7Available(bookings, blocks, start, close){
+  const need = fp7NeedSegments(start);
+  if(!need.length) return false;
+  if(Math.max(...need.map(s => s.end)) > close) return false;
+  const busy = fp7BookingSegments(bookings);
+  return need.every(n => {
+    if(fp7BlockedBySchedule(blocks, n)) return false;
+    return !busy.some(b => {
+      const sameStaff = n.therapist === "不指定" || b.therapist === "不指定" || b.therapist === n.therapist;
+      return sameStaff && fp7Overlap(n.start,n.end,b.start,b.end);
+    });
+  });
+}
+function fp7TodayCutoff(date, open){
+  const now = new Date();
+  const local = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+  if(date !== local) return open;
+  return Math.max(open, Math.ceil((now.getHours()*60 + now.getMinutes()) / 30) * 30);
+}
+function fp7RenderHint(box, hours, totalNeeded, availableStarts){
+  const old = document.getElementById("fp7AvailabilityHint");
+  if(old) old.remove();
+  const hint = document.createElement("div");
+  hint.id = "fp7AvailabilityHint";
+  hint.className = "fp7-availability-hint";
+  const maxStart = availableStarts.length ? availableStarts[availableStarts.length - 1] : null;
+  hint.innerHTML = `<strong>本次需要保留 ${totalNeeded} 分鐘</strong><span>營業至 ${fp7MinToTime(hours.close)}${maxStart !== null ? `｜最晚可從 ${fp7MinToTime(maxStart)} 開始` : "｜本日已無符合長度的空檔"}</span>`;
+  box.prepend(hint);
+}
+
+window.renderSlots = async function(){
+  const box = document.getElementById("slotList");
+  const date = document.getElementById("date")?.value;
+  if(!box || !date) return;
+
+  const allCart = (()=>{ try{return Array.isArray(cart)?cart:[];}catch(e){return [];} })();
+  const hasNail = allCart.some(i => /美甲|曼曼/.test(`${i?.name||""} ${i?.category||""} ${i?.therapist||""}`));
+  const spaItems = fp7Items();
+  if(!allCart.length){ box.className="slot-list muted"; box.textContent="請先加入療程並選擇日期"; return; }
+  if(hasNail && !spaItems.length){
+    box.className="slot-list";
+    box.innerHTML='<div class="nail-consult-box"><strong>美甲採諮詢預約制</strong><p>請填寫希望日期與需求，店家會再確認正式時間。</p></div>';
+    return;
+  }
+
+  const hours = fp7DayHours(date);
+  if(hours.closed){ box.className="slot-list muted"; box.textContent="週日店休，請選擇其他日期。"; return; }
+  if(!dbReady || !db){ box.className="slot-list muted"; box.textContent="目前無法連接預約資料，請稍後再試。"; return; }
+
+  box.className="slot-list";
+  box.innerHTML="讀取可預約時間中...";
+  const [bookingRes, blockRes] = await Promise.all([
+    db.from("bookings").select("*").eq("date",date).neq("status","cancelled"),
+    db.from("booking_blocks").select("*").eq("date",date)
+  ]);
+  if(bookingRes.error){ console.error(bookingRes.error); box.className="slot-list muted"; box.textContent="讀取預約資料失敗，請稍後再試。"; return; }
+  const blocks = blockRes.error ? [] : (blockRes.data || []);
+  if(fp7AllDayClosed(blocks)){
+    const reason = blocks.find(b => ["全店","全日","全店休"].includes(b.therapist || "全店"))?.reason || "店休";
+    box.className="slot-list muted"; box.textContent=`本日暫停預約：${reason}`; return;
+  }
+
+  const totalNeeded = Math.max(...fp7NeedSegments(0).map(s=>s.end));
+  const cutoff = fp7TodayCutoff(date, hours.open);
+  const starts = [];
+  for(let t=hours.open; t<=hours.close-totalNeeded; t+=30){ if(t>=cutoff) starts.push(t); }
+  const availableStarts = starts.filter(t => fp7Available(bookingRes.data || [], blocks, t, hours.close));
+
+  const buttons = starts.map(t => {
+    const ok = availableStarts.includes(t);
+    return `<button type="button" class="slot-btn fp7-slot ${ok?"":"disabled"}" data-time="${fp7MinToTime(t)}" ${ok?"":"disabled"}>${fp7MinToTime(t)}${ok?"":" 已滿"}</button>`;
+  }).join("");
+  box.innerHTML = `${hasNail?'<div class="nail-consult-box"><strong>美甲時間另行確認</strong><p>下方僅為 SPA／臉部／身體可預約時間。</p></div>':""}<div class="slot-grid fp7-slot-grid">${buttons}</div>`;
+  fp7RenderHint(box, hours, totalNeeded, availableStarts);
+  if(!starts.length || !availableStarts.length){
+    const msg = document.createElement("div"); msg.className="closed-day-message"; msg.textContent="本日沒有足夠的連續時間安排此療程，請選擇其他日期或洽詢 06-2723611。"; box.appendChild(msg);
+  }
+};
+
+/* 不改原送出流程，只阻擋連續重複點擊 */
+document.addEventListener("submit", function(e){
+  if(e.target?.id !== "bookingForm") return;
+  const now = Date.now();
+  const last = Number(e.target.dataset.fp7LastSubmit || 0);
+  if(now - last < 8000){ e.preventDefault(); e.stopImmediatePropagation(); alert("預約正在送出，請不要重複點擊。"); return; }
+  e.target.dataset.fp7LastSubmit = String(now);
+}, true);
