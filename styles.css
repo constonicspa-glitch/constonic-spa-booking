@@ -934,3 +934,8 @@ input[id*="Amount"]{
 .p10-check-label{display:flex!important;align-items:center;gap:8px;font-weight:700;line-height:1.4}
 .p10-check-label input{width:18px!important;height:18px!important;min-width:18px;margin:0}
 .p10-income-mode small{display:block;margin-top:5px;color:#756654;line-height:1.5}
+
+/* Patch12：人工實收欄位 */
+.p12-suggest-btn{margin-top:8px;width:100%;}
+#p12SuggestedReceived{display:block;margin-top:6px;line-height:1.45;color:#6b6258;}
+#totalReceived:not([readonly]),#v2TotalReceived:not([readonly]){background:#fffdf7;border-color:#c8a96b;font-weight:700;}

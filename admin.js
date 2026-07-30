@@ -3297,3 +3297,90 @@ window.collectCheckoutFromForm=function(existing={}){
   checkout.calculated.totalReceived=checkout.total_received;
   return checkout;
 };
+
+/* =========================================================
+   CONSTONIC V6.0 FINAL PATCH 12
+   本次實收改為人工確認：
+   - 自動計算只提供建議，不再強制覆蓋人工輸入
+   - 儲存、月報與匯出以人工確認的 total_received 為準
+   - 技術、商品、課程／儲值獎金仍依各自欄位計算
+========================================================= */
+window.CONSTONIC_ADMIN_FINAL_PATCH12="V6.0 Final Patch 12";
+
+function p12ManualInput(){
+  const inputs=Array.from(document.querySelectorAll('#totalReceived,#v2TotalReceived'));
+  return inputs.find(el=>el.offsetParent!==null)||inputs[inputs.length-1]||null;
+}
+function p12SuggestedTotal(){
+  const c=typeof p10CollectCurrent==='function'?p10CollectCurrent():{};
+  c.sales_included_in_tech=typeof p11CheckboxValue==='function'?p11CheckboxValue():Boolean(c.sales_included_in_tech);
+  return typeof p11ReceivedTotal==='function'?p11ReceivedTotal(c,c.sales_included_in_tech):0;
+}
+window.p12UseSuggestedReceived=function(){
+  const value=p12SuggestedTotal();
+  document.querySelectorAll('#totalReceived,#v2TotalReceived').forEach(input=>{
+    input.value=value;
+    input.dataset.manual='0';
+  });
+  const hint=document.getElementById('p12SuggestedReceived');
+  if(hint) hint.textContent='目前建議金額：NT$ '+Number(value||0).toLocaleString('zh-TW');
+};
+
+const p12OldRenderCheckout=window.renderCheckoutPanel;
+window.renderCheckoutPanel=function(b){
+  let html=p12OldRenderCheckout(b);
+  const hasSaved=b&&b.checkout&&Object.prototype.hasOwnProperty.call(b.checkout,'total_received');
+  const saved=Number(b?.checkout?.total_received||0);
+  html=html.replace('本次實收（自動加總）','本次實收（人工確認）');
+  html=html.replace(/<input id="totalReceived" type="number" readonly value="[^"]*">/,
+    `<input id="totalReceived" type="number" min="0" value="${hasSaved?saved:''}" data-manual="${hasSaved?'1':'0'}" oninput="this.dataset.manual='1'">`+
+    `<small id="p12SuggestedReceived">自動加總僅供參考，請輸入本次真正收到的金額。</small>`+
+    `<button type="button" class="secondary p12-suggest-btn" onclick="p12UseSuggestedReceived()">套用系統建議金額</button>`
+  );
+  return html;
+};
+
+/* 即時計算獎金，但不覆蓋人工實收 */
+window.c64RecalcAll=function(){
+  const c=p10CollectCurrent();
+  c.sales_included_in_tech=typeof p11CheckboxValue==='function'?p11CheckboxValue():Boolean(c.sales_included_in_tech);
+  let tech30=0,tech40=0,fixed=0;
+  document.querySelectorAll("#techRows .tech-row,#v2TechRows .v3-tech-row").forEach((row,idx)=>{
+    const amount=Number(document.getElementById(`techAmount_${idx}`)?.value||document.getElementById(`v2TechAmount_${idx}`)?.value||0);
+    const rate=document.getElementById(`techRate_${idx}`)?.value||document.getElementById(`v2TechRate_${idx}`)?.value||"30";
+    const fixedVal=Number(document.getElementById(`fixedSalary_${idx}`)?.value||0);
+    if(rate==="30") tech30+=Math.round(amount*.3);
+    if(rate==="40") tech40+=Math.round(amount*.4);
+    if(rate==="fixed") fixed+=fixedVal||amount;
+  });
+  const product=Number(c.product_amount||0);
+  const extra=Number(c.course_amount||0)+Number(c.stored_value_new_amount||0);
+  const suggested=typeof p11ReceivedTotal==='function'?p11ReceivedTotal(c,c.sales_included_in_tech):0;
+  document.querySelectorAll('#totalReceived,#v2TotalReceived').forEach(input=>{
+    input.readOnly=false;
+    if(input.dataset.manual!=='1' && (input.value==='' || Number(input.value)===0)) input.value=suggested;
+  });
+  const hint=document.getElementById('p12SuggestedReceived');
+  if(hint) hint.textContent='系統建議：NT$ '+Number(suggested||0).toLocaleString('zh-TW')+'；實際營收以你輸入的本次實收為準。';
+  const set=(id,val)=>document.querySelectorAll(`#${id}`).forEach(el=>el.textContent='NT$ '+Number(val||0).toLocaleString('zh-TW'));
+  set('salary30',tech30);set('salary40',tech40);set('salaryFixed',fixed);
+  set('salaryProduct',Math.round(product*.1));set('salaryCourse',Math.round(extra*.02));
+  set('salaryTotal',tech30+tech40+fixed+Math.round(product*.1)+Math.round(extra*.02));
+};
+window.c60RecalcCheckout=window.c64RecalcAll;
+
+const p12OldCollectCheckout=window.collectCheckoutFromForm;
+window.collectCheckoutFromForm=function(existing={}){
+  const input=p12ManualInput();
+  const manualValue=Number(input?.value||0);
+  const checkout=p12OldCollectCheckout(existing);
+  checkout.total_received=manualValue;
+  checkout.total_received_manual=true;
+  checkout.calculated=checkout.calculated||checkoutTotals(checkout);
+  checkout.calculated.totalReceived=manualValue;
+  return checkout;
+};
+
+document.addEventListener('input',function(e){
+  if(e.target?.id==='totalReceived'||e.target?.id==='v2TotalReceived') e.target.dataset.manual='1';
+});
