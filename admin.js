@@ -3497,3 +3497,91 @@ document.addEventListener('input',function(e){
     e.target.readOnly=false;
   }
 },true);
+
+/* =========================================================
+   CONSTONIC SPA V7.0 RC2 — 人工實收最終鎖定修正
+   - 阻止 RC3 / RC4 / Patch10 / Patch11 舊監聽器再次鎖回欄位
+   - 本次實收只由人工輸入或「套用建議」按鈕改變
+   - 薪資與獎金計算不影響本次實收
+========================================================= */
+window.CONSTONIC_ADMIN_VERSION = "V7.0 RC2";
+
+/* 舊版全域監聽器仍會呼叫這個函式，因此在最後重新定義，禁止它改動實收。 */
+rc3ApplyCheckoutTotals = function(){
+  if(typeof window.c64RecalcAll === "function") window.c64RecalcAll();
+  v70UnlockReceivedInput();
+};
+
+/* 在事件進入舊版 document 監聽器之前攔截，避免輸入後又被設成 readonly。 */
+document.addEventListener("input", function(event){
+  const target = event.target;
+  if(!target?.matches?.("#totalReceived,#v2TotalReceived")) return;
+  target.readOnly = false;
+  target.disabled = false;
+  target.removeAttribute("readonly");
+  target.removeAttribute("disabled");
+  target.dataset.manual = "1";
+  event.stopPropagation();
+}, true);
+
+document.addEventListener("change", function(event){
+  const target = event.target;
+  if(!target?.matches?.("#totalReceived,#v2TotalReceived")) return;
+  target.readOnly = false;
+  target.disabled = false;
+  target.dataset.manual = "1";
+  event.stopPropagation();
+}, true);
+
+/* 彈窗完成渲染後，移除 inline readonly 並保留資料庫已儲存值。 */
+function v702FinalizeManualReceived(){
+  const input = v70FindReceivedInput();
+  if(!input) return;
+  input.readOnly = false;
+  input.disabled = false;
+  input.removeAttribute("readonly");
+  input.removeAttribute("disabled");
+  input.dataset.manual = "1";
+  input.setAttribute("inputmode", "numeric");
+  input.setAttribute("autocomplete", "off");
+  const label = input.closest(".field")?.querySelector("label");
+  if(label) label.textContent = "本次實收（人工確認）";
+}
+
+const v702OpenBookingModal = window.openBookingModal;
+window.openBookingModal = async function(id){
+  await v702OpenBookingModal.apply(this, arguments);
+  [0, 50, 150, 350].forEach(ms => setTimeout(v702FinalizeManualReceived, ms));
+};
+
+/* 重新計算只更新獎金；絕不寫入 totalReceived.value。 */
+window.c64RecalcAll = function(){
+  let tech30 = 0, tech40 = 0, fixed = 0;
+  document.querySelectorAll("#techRows .tech-row,#v2TechRows .v3-tech-row,#v2TechRows .tech-row").forEach((row, idx) => {
+    const amount = Number(document.getElementById(`techAmount_${idx}`)?.value || document.getElementById(`v2TechAmount_${idx}`)?.value || 0);
+    const rate = document.getElementById(`techRate_${idx}`)?.value || document.getElementById(`v2TechRate_${idx}`)?.value || "30";
+    const fixedValue = Number(document.getElementById(`fixedSalary_${idx}`)?.value || document.getElementById(`c42FixedPay_${idx}`)?.value || 0);
+    if(rate === "30") tech30 += Math.round(amount * 0.30);
+    else if(rate === "40") tech40 += Math.round(amount * 0.40);
+    else if(rate === "fixed") fixed += fixedValue || amount;
+  });
+
+  const product = Number(document.getElementById("productAmount")?.value || document.getElementById("v2ProductAmount")?.value || 0);
+  const course = Number(document.getElementById("courseAmount")?.value || document.getElementById("v2CourseAmount")?.value || 0);
+  const stored = Number(document.getElementById("storedValueAmount")?.value || document.getElementById("v2StoredValueAmount")?.value || 0);
+  const productBonus = Math.round(product * 0.10);
+  const courseBonus = Math.round((course + stored) * 0.02);
+  const setMoney = (id, value) => document.querySelectorAll(`#${id}`).forEach(el => el.textContent = "NT$ " + v70Money(value));
+
+  setMoney("salary30", tech30);
+  setMoney("salary40", tech40);
+  setMoney("salaryFixed", fixed);
+  setMoney("salaryProduct", productBonus);
+  setMoney("salaryCourse", courseBonus);
+  setMoney("salaryTotal", tech30 + tech40 + fixed + productBonus + courseBonus);
+
+  v702FinalizeManualReceived();
+  const hint = document.getElementById("p12SuggestedReceived");
+  if(hint) hint.textContent = "系統建議：NT$ " + v70Money(v70SuggestedReceived()) + "；實際營收以人工輸入為準。";
+};
+window.c60RecalcCheckout = window.c64RecalcAll;
