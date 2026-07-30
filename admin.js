@@ -3072,3 +3072,65 @@ window.p8ChooseUser=function(username,display){localStorage.setItem("constonic_c
 
 function p8Init(){p8InjectMainActions();p8InjectMonthCalendar();}
 document.addEventListener("DOMContentLoaded",()=>setTimeout(p8Init,1400));
+
+/* =========================================================
+   CONSTONIC ADMIN V6.0 Final Patch 9
+   - 補登視窗可完整捲動與固定儲存鍵
+   - 月薪資 CSV 依服務人員分開計算
+========================================================= */
+window.CONSTONIC_ADMIN_FINAL_PATCH9="V6.0 Final Patch 9";
+
+function p9StaffForTechRow(booking,row,index){
+  return row?.therapist||row?.staff_name||booking?.items?.[index]?.therapist||booking?.therapist||"未指定";
+}
+function p9SalaryDetailRows(booking){
+  const c=defaultCheckout(booking); const rows=Array.isArray(c.tech_rows)?c.tech_rows:[];
+  const result=[];
+  rows.forEach((r,index)=>{
+    const amount=Number(r.amount||0), rate=String(r.rate||"30"), fixed=Number(r.fixed_salary||0);
+    let salary=0;
+    if(rate==="30") salary=Math.round(amount*.30);
+    else if(rate==="40") salary=Math.round(amount*.40);
+    else if(rate==="fixed") salary=fixed||amount;
+    result.push({
+      staff:p9StaffForTechRow(booking,r,index),
+      item:r.item_name||booking?.items?.[index]?.name||"技術服務",
+      amount, rate:rate==="fixed"?"固定薪資":rate+"%", salary
+    });
+  });
+  const main=booking.therapist||booking?.items?.[0]?.therapist||"未指定";
+  const productBonus=Math.round(Number(c.product_amount||0)*.10);
+  const courseBonus=Math.round((Number(c.course_amount||0)+Number(c.stored_value_new_amount||0))*.02);
+  const platform=Number(c.platform_fixed_pay||0);
+  if(productBonus) result.push({staff:main,item:"商品銷售獎金10%",amount:Number(c.product_amount||0),rate:"10%",salary:productBonus});
+  if(courseBonus) result.push({staff:main,item:"課程／儲值獎金2%",amount:Number(c.course_amount||0)+Number(c.stored_value_new_amount||0),rate:"2%",salary:courseBonus});
+  if(platform) result.push({staff:main,item:"平台固定薪資",amount:platform,rate:"固定薪資",salary:platform});
+  return result;
+}
+
+window.exportMonthlyCSV=async function(){
+  const {ym,start,end}=getMonthRange();
+  const {data,error}=await db.from("bookings").select("*").gte("date",start).lte("date",end).neq("status","cancelled").order("date",{ascending:true}).order("slot",{ascending:true});
+  if(error){alert("匯出失敗");console.error(error);return;}
+  const details=[];
+  (data||[]).forEach(b=>p9SalaryDetailRows(b).forEach(r=>details.push({...r,date:b.date,slot:b.slot,customer:b.customer_name||"",bookingId:b.id||""})));
+  const groups={}; details.forEach(r=>{groups[r.staff]??={salary:0,serviceAmount:0,count:0};groups[r.staff].salary+=r.salary;groups[r.staff].serviceAmount+=r.amount;groups[r.staff].count++;});
+  const headers=["服務人員","日期","時間","客戶姓名","項目／獎金類別","計算基礎金額","薪資方式","本筆薪資"];
+  const lines=[headers.map(csvEscape).join(",")];
+  Object.keys(groups).sort().forEach(staff=>{
+    details.filter(r=>r.staff===staff).forEach(r=>lines.push([r.staff,r.date,r.slot,r.customer,r.item,r.amount,r.rate,r.salary].map(csvEscape).join(",")));
+    const g=groups[staff];
+    lines.push([staff,"小計","","",`${g.count} 筆`,g.serviceAmount,"薪資小計",g.salary].map(csvEscape).join(","));
+    lines.push("");
+  });
+  const grand=Object.values(groups).reduce((s,g)=>s+g.salary,0);
+  lines.push(["全部人員總計","","","","","","",grand].map(csvEscape).join(","));
+  const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`康姿多儷SPA_${ym}_員工個別薪資.csv`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+};
+
+/* 補登視窗開啟時鎖定背景，但允許視窗本身捲動 */
+const p9OldOpenManual=window.p8OpenManualBooking;
+window.p8OpenManualBooking=function(){p9OldOpenManual?.apply(this,arguments);document.documentElement.classList.add("p9-manual-open");document.body.style.overflow="hidden";setTimeout(()=>document.querySelector("#p8ManualModal .p8-manual-body")?.scrollTo({top:0}),30);};
+const p9OldCloseManual=window.p8CloseManualBooking;
+window.p8CloseManualBooking=function(){p9OldCloseManual?.apply(this,arguments);document.documentElement.classList.remove("p9-manual-open");document.body.style.overflow="";};

@@ -2349,3 +2349,40 @@ document.addEventListener("DOMContentLoaded",()=>{
   p8Observer.observe(root,{childList:true,subtree:true});
   setTimeout(()=>{p8RenderTeacherFee();p8MoveAvailabilityHint();},500);
 });
+
+/* =========================================================
+   CONSTONIC FRONT V6.0 Final Patch 9 - Booking form persistence
+   避免選擇時間後，舊版重複 renderSlots 將登記表單隱藏。
+========================================================= */
+window.CONSTONIC_FRONT_FINAL_PATCH9="V6.0 Final Patch 9 Booking Form Persistence";
+function p9SelectedBookingTime(){
+  const hidden=document.getElementById("selectedSlot")||document.querySelector('input[name="slot"]');
+  return String(window.selectedSlot||hidden?.value||"").match(/\d{1,2}:\d{2}/)?.[0]||"";
+}
+function p9KeepBookingFormVisible(){
+  const time=p9SelectedBookingTime();
+  if(!time) return;
+  const contact=document.getElementById("contactCard")||document.getElementById("customerCard")||document.getElementById("bookingForm")||document.querySelector(".contact-card");
+  if(contact){
+    contact.classList.remove("hidden");
+    contact.style.display="";
+    contact.setAttribute("data-p9-selected-time",time);
+  }
+  document.querySelectorAll(".slot-btn,.slot-button").forEach(btn=>{
+    const t=btn.dataset.time||(btn.textContent.match(/\d{1,2}:\d{2}/)||[])[0];
+    if(t===time) btn.classList.add("selected","is-selected");
+  });
+}
+document.addEventListener("click",e=>{
+  if(e.target.closest(".slot-btn,.slot-button")){
+    setTimeout(p9KeepBookingFormVisible,20);
+    setTimeout(p9KeepBookingFormVisible,220);
+    setTimeout(p9KeepBookingFormVisible,700);
+  }
+},true);
+document.addEventListener("change",()=>setTimeout(p9KeepBookingFormVisible,120));
+document.addEventListener("DOMContentLoaded",()=>{
+  setTimeout(p9KeepBookingFormVisible,600);
+  const obs=new MutationObserver(()=>p9KeepBookingFormVisible());
+  obs.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:["class","style"]});
+});
