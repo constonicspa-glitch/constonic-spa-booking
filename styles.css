@@ -939,3 +939,20 @@ input[id*="Amount"]{
 .p12-suggest-btn{margin-top:8px;width:100%;}
 #p12SuggestedReceived{display:block;margin-top:6px;line-height:1.45;color:#6b6258;}
 #totalReceived:not([readonly]),#v2TotalReceived:not([readonly]){background:#fffdf7;border-color:#c8a96b;font-weight:700;}
+
+/* Patch13：本次實收必須明確呈現為可輸入欄位 */
+#totalReceived.p13-manual-received,
+#v2TotalReceived.p13-manual-received,
+input[name="total_received"].p13-manual-received {
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text !important;
+  opacity: 1 !important;
+  background: #fff !important;
+}
+#totalReceived.p13-manual-received:focus,
+#v2TotalReceived.p13-manual-received:focus,
+input[name="total_received"].p13-manual-received:focus {
+  outline: 3px solid rgba(26, 92, 82, .22) !important;
+}
