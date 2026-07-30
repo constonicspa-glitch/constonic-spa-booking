@@ -3384,3 +3384,116 @@ window.collectCheckoutFromForm=function(existing={}){
 document.addEventListener('input',function(e){
   if(e.target?.id==='totalReceived'||e.target?.id==='v2TotalReceived') e.target.dataset.manual='1';
 });
+
+/* =========================================================
+   CONSTONIC SPA V7.0 RC1 — 收銀／薪資穩定重構（第一階段）
+   目標：本次實收完全人工輸入；獎金仍自動計算。
+   不新增其他功能、不修改預約資料結構。
+========================================================= */
+window.CONSTONIC_ADMIN_VERSION = "V7.0 RC1";
+
+function v70Money(n){ return Number(n || 0).toLocaleString("zh-TW"); }
+
+function v70FindReceivedInput(){
+  const all = Array.from(document.querySelectorAll('#totalReceived,#v2TotalReceived'));
+  return all.find(el => el.offsetParent !== null) || all[all.length - 1] || null;
+}
+
+function v70UnlockReceivedInput(savedValue){
+  document.querySelectorAll('#totalReceived,#v2TotalReceived').forEach(input => {
+    input.readOnly = false;
+    input.disabled = false;
+    input.removeAttribute('readonly');
+    input.removeAttribute('disabled');
+    input.setAttribute('inputmode','decimal');
+    input.dataset.manual = '1';
+    if(savedValue !== undefined && savedValue !== null && Number.isFinite(Number(savedValue))){
+      input.value = Number(savedValue);
+    }
+  });
+}
+
+function v70SuggestedReceived(){
+  const method = String(document.getElementById('paymentMethod')?.value || document.getElementById('v2PaymentMethod')?.value || '現金');
+  const noCashTech = ['扣儲值','扣課程','團購券','免收款'].includes(method);
+  let tech = 0;
+  document.querySelectorAll('#techRows .tech-row,#v2TechRows .v3-tech-row,#v2TechRows .tech-row').forEach((row,idx)=>{
+    const amount = Number(document.getElementById(`techAmount_${idx}`)?.value || document.getElementById(`v2TechAmount_${idx}`)?.value || 0);
+    tech += amount;
+  });
+  const product = Number(document.getElementById('productAmount')?.value || document.getElementById('v2ProductAmount')?.value || 0);
+  const course = Number(document.getElementById('courseAmount')?.value || document.getElementById('v2CourseAmount')?.value || 0);
+  const stored = Number(document.getElementById('storedValueAmount')?.value || document.getElementById('v2StoredValueAmount')?.value || 0);
+  return (noCashTech ? 0 : tech) + product + course + stored;
+}
+
+window.v70UseSuggestedReceived = function(){
+  const input = v70FindReceivedInput();
+  if(!input) return;
+  input.value = v70SuggestedReceived();
+  input.dataset.manual = '1';
+};
+
+/* 重新計算薪資，但永遠不覆蓋人工實收 */
+window.c64RecalcAll = function(){
+  let tech30=0, tech40=0, fixed=0;
+  document.querySelectorAll('#techRows .tech-row,#v2TechRows .v3-tech-row,#v2TechRows .tech-row').forEach((row,idx)=>{
+    const amount = Number(document.getElementById(`techAmount_${idx}`)?.value || document.getElementById(`v2TechAmount_${idx}`)?.value || 0);
+    const rate = document.getElementById(`techRate_${idx}`)?.value || document.getElementById(`v2TechRate_${idx}`)?.value || '30';
+    const fixedVal = Number(document.getElementById(`fixedSalary_${idx}`)?.value || document.getElementById(`c42FixedPay_${idx}`)?.value || 0);
+    if(rate === '30') tech30 += Math.round(amount * .30);
+    else if(rate === '40') tech40 += Math.round(amount * .40);
+    else if(rate === 'fixed') fixed += fixedVal || amount;
+  });
+  const product = Number(document.getElementById('productAmount')?.value || document.getElementById('v2ProductAmount')?.value || 0);
+  const course = Number(document.getElementById('courseAmount')?.value || document.getElementById('v2CourseAmount')?.value || 0);
+  const stored = Number(document.getElementById('storedValueAmount')?.value || document.getElementById('v2StoredValueAmount')?.value || 0);
+  const productBonus = Math.round(product * .10);
+  const courseBonus = Math.round((course + stored) * .02);
+  const set = (id,val) => document.querySelectorAll(`#${id}`).forEach(el => el.textContent = 'NT$ ' + v70Money(val));
+  set('salary30',tech30); set('salary40',tech40); set('salaryFixed',fixed);
+  set('salaryProduct',productBonus); set('salaryCourse',courseBonus);
+  set('salaryTotal',tech30 + tech40 + fixed + productBonus + courseBonus);
+  v70UnlockReceivedInput();
+  const hint = document.getElementById('p12SuggestedReceived');
+  if(hint) hint.textContent = '系統建議：NT$ ' + v70Money(v70SuggestedReceived()) + '；本次實收以人工輸入為準。';
+};
+window.c60RecalcCheckout = window.c64RecalcAll;
+
+/* 儲存時，最後強制以畫面人工輸入值為準 */
+const v70PreviousCollectCheckout = window.collectCheckoutFromForm;
+window.collectCheckoutFromForm = function(existing={}){
+  const manual = Number(v70FindReceivedInput()?.value || 0);
+  const checkout = v70PreviousCollectCheckout(existing);
+  checkout.total_received = manual;
+  checkout.total_received_manual = true;
+  checkout.calculated = checkout.calculated || checkoutTotals(checkout);
+  checkout.calculated.totalReceived = manual;
+  return checkout;
+};
+
+/* 視窗打開後只執行有限次解鎖，不使用 MutationObserver，避免後台卡住 */
+const v70PreviousOpenBookingModal = window.openBookingModal;
+if(typeof v70PreviousOpenBookingModal === 'function'){
+  window.openBookingModal = async function(id){
+    await v70PreviousOpenBookingModal.apply(this, arguments);
+    const booking = (window.currentBookings || []).find(b => b.id === id);
+    const hasSaved = booking?.checkout && Object.prototype.hasOwnProperty.call(booking.checkout,'total_received');
+    const saved = hasSaved ? Number(booking.checkout.total_received || 0) : undefined;
+    [0,80,220].forEach(ms => setTimeout(()=>{
+      v70UnlockReceivedInput(saved);
+      const input = v70FindReceivedInput();
+      if(input){
+        const label = input.closest('.field')?.querySelector('label');
+        if(label) label.textContent = '本次實收（人工確認）';
+      }
+    },ms));
+  };
+}
+
+document.addEventListener('input',function(e){
+  if(e.target?.matches?.('#totalReceived,#v2TotalReceived')){
+    e.target.dataset.manual='1';
+    e.target.readOnly=false;
+  }
+},true);

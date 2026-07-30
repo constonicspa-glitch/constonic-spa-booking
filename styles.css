@@ -939,3 +939,11 @@ input[id*="Amount"]{
 .p12-suggest-btn{margin-top:8px;width:100%;}
 #p12SuggestedReceived{display:block;margin-top:6px;line-height:1.45;color:#6b6258;}
 #totalReceived:not([readonly]),#v2TotalReceived:not([readonly]){background:#fffdf7;border-color:#c8a96b;font-weight:700;}
+
+/* V7.0 RC1：人工實收欄位 */
+#totalReceived,#v2TotalReceived{
+  pointer-events:auto !important;
+  cursor:text !important;
+  background:#fff !important;
+  opacity:1 !important;
+}
