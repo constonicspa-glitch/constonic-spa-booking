@@ -928,3 +928,9 @@ input[id*="Amount"]{
  #p8ManualModal .p8-manual-footer{grid-template-columns:1fr 1fr!important;padding-bottom:max(12px,env(safe-area-inset-bottom))!important}
  .tech-row,.item-row{grid-template-columns:1fr!important}
 }
+
+/* Final Patch 10：營收重複計算選項 */
+.p10-income-mode{grid-column:1/-1;padding:10px 12px;border:1px solid #ead8b7;border-radius:12px;background:#fffaf0}
+.p10-check-label{display:flex!important;align-items:center;gap:8px;font-weight:700;line-height:1.4}
+.p10-check-label input{width:18px!important;height:18px!important;min-width:18px;margin:0}
+.p10-income-mode small{display:block;margin-top:5px;color:#756654;line-height:1.5}
