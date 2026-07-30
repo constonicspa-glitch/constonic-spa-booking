@@ -3229,3 +3229,71 @@ window.collectCheckoutFromForm=function(existing={}){
   checkout.calculated=checkoutTotals(checkout);
   return checkout;
 };
+
+/* =========================================================
+   CONSTONIC ADMIN V6.0 Final Patch 11
+   - 修正「已包含在技術收款中」勾選後，畫面本次實收仍重複加總
+   - 即時畫面、儲存資料、月報統一使用同一判斷
+========================================================= */
+window.CONSTONIC_ADMIN_FINAL_PATCH11="V6.0 Final Patch 11";
+
+function p11CheckboxValue(){
+  const boxes=Array.from(document.querySelectorAll('#salesIncludedInTech'));
+  const visible=boxes.find(el=>el.offsetParent!==null);
+  return Boolean((visible||boxes[boxes.length-1])?.checked);
+}
+function p11ReceivedTotal(c, includedOverride){
+  const method=String(c?.payment_method||"現金");
+  const nonCash=["扣儲值","扣課程","團購券","免收款"].includes(method);
+  const tech=nonCash?0:p10TechBase(c||{});
+  const product=Number(c?.product_amount||0);
+  const extra=Number(c?.course_amount||0)+Number(c?.stored_value_new_amount||0);
+  const included=typeof includedOverride==="boolean"
+    ? includedOverride
+    : (typeof c?.sales_included_in_tech==="boolean" ? c.sales_included_in_tech : p10IncludedDefault(c||{}));
+  return product+(included?Math.max(tech,extra):tech+extra);
+}
+
+/* 讓舊有呼叫也使用 Patch11 計算 */
+p10ReceivedTotal=function(c){ return p11ReceivedTotal(c); };
+
+window.c64RecalcAll=function(){
+  const c=p10CollectCurrent();
+  c.sales_included_in_tech=p11CheckboxValue();
+  let tech30=0,tech40=0,fixed=0;
+  document.querySelectorAll("#techRows .tech-row,#v2TechRows .v3-tech-row").forEach((row,idx)=>{
+    const amount=Number(document.getElementById(`techAmount_${idx}`)?.value||document.getElementById(`v2TechAmount_${idx}`)?.value||0);
+    const rate=document.getElementById(`techRate_${idx}`)?.value||document.getElementById(`v2TechRate_${idx}`)?.value||"30";
+    const fixedVal=Number(document.getElementById(`fixedSalary_${idx}`)?.value||0);
+    if(rate==="30") tech30+=Math.round(amount*.3);
+    if(rate==="40") tech40+=Math.round(amount*.4);
+    if(rate==="fixed") fixed+=fixedVal||amount;
+  });
+  const product=Number(c.product_amount||0);
+  const extra=Number(c.course_amount||0)+Number(c.stored_value_new_amount||0);
+  const total=p11ReceivedTotal(c,c.sales_included_in_tech);
+  document.querySelectorAll("#totalReceived,#v2TotalReceived").forEach(input=>{input.value=total;input.readOnly=true;});
+  const set=(id,val)=>{document.querySelectorAll(`#${id}`).forEach(el=>el.textContent="NT$ "+Number(val||0).toLocaleString("zh-TW"));};
+  set("salary30",tech30);set("salary40",tech40);set("salaryFixed",fixed);
+  set("salaryProduct",Math.round(product*.1));set("salaryCourse",Math.round(extra*.02));
+  set("salaryTotal",tech30+tech40+fixed+Math.round(product*.1)+Math.round(extra*.02));
+};
+window.c60RecalcCheckout=window.c64RecalcAll;
+
+/* 捕捉勾選切換，避免舊 inline handler 或重複畫面干擾 */
+document.addEventListener('change',function(e){
+  if(e.target?.id==='salesIncludedInTech'){
+    document.querySelectorAll('#salesIncludedInTech').forEach(box=>{if(box!==e.target)box.checked=e.target.checked;});
+    window.c64RecalcAll();
+  }
+});
+
+const p11OldCollectCheckout=window.collectCheckoutFromForm;
+window.collectCheckoutFromForm=function(existing={}){
+  const checkout=p11OldCollectCheckout(existing);
+  checkout.sales_included_in_tech=p11CheckboxValue();
+  checkout.total_received=p11ReceivedTotal(checkout,checkout.sales_included_in_tech);
+  checkout.calculated=checkoutTotals(checkout);
+  checkout.calculated.totalReceived=checkout.total_received;
+  return checkout;
+};
