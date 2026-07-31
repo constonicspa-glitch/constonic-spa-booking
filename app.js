@@ -2351,38 +2351,29 @@ document.addEventListener("DOMContentLoaded",()=>{
 });
 
 /* =========================================================
-   CONSTONIC FRONT V6.0 Final Patch 9 - Booking form persistence
-   避免選擇時間後，舊版重複 renderSlots 將登記表單隱藏。
+   CONSTONIC FRONT V7.0 RC3 - 前台表單穩定修正
+   - 移除會反覆監看整個頁面 attributes 的 Patch 9
+   - 選擇時段後只執行一次顯示聯絡資料，不重畫表單
+   - 不監看姓名、電話等輸入欄位，避免輸入時焦點跳離
 ========================================================= */
-window.CONSTONIC_FRONT_FINAL_PATCH9="V6.0 Final Patch 9 Booking Form Persistence";
-function p9SelectedBookingTime(){
-  const hidden=document.getElementById("selectedSlot")||document.querySelector('input[name="slot"]');
-  return String(window.selectedSlot||hidden?.value||"").match(/\d{1,2}:\d{2}/)?.[0]||"";
+window.CONSTONIC_FRONT_V7_RC3 = "V7.0 RC3 Front Form Stability";
+
+function v7rc3KeepContactFormStable(){
+  const contact = document.getElementById("contactCard")
+    || document.getElementById("customerCard")
+    || document.getElementById("bookingForm")
+    || document.querySelector(".contact-card");
+  if(!contact) return;
+  contact.classList.remove("hidden");
+  contact.style.display = "";
 }
-function p9KeepBookingFormVisible(){
-  const time=p9SelectedBookingTime();
-  if(!time) return;
-  const contact=document.getElementById("contactCard")||document.getElementById("customerCard")||document.getElementById("bookingForm")||document.querySelector(".contact-card");
-  if(contact){
-    contact.classList.remove("hidden");
-    contact.style.display="";
-    contact.setAttribute("data-p9-selected-time",time);
-  }
-  document.querySelectorAll(".slot-btn,.slot-button").forEach(btn=>{
-    const t=btn.dataset.time||(btn.textContent.match(/\d{1,2}:\d{2}/)||[])[0];
-    if(t===time) btn.classList.add("selected","is-selected");
-  });
-}
-document.addEventListener("click",e=>{
-  if(e.target.closest(".slot-btn,.slot-button")){
-    setTimeout(p9KeepBookingFormVisible,20);
-    setTimeout(p9KeepBookingFormVisible,220);
-    setTimeout(p9KeepBookingFormVisible,700);
-  }
-},true);
-document.addEventListener("change",()=>setTimeout(p9KeepBookingFormVisible,120));
-document.addEventListener("DOMContentLoaded",()=>{
-  setTimeout(p9KeepBookingFormVisible,600);
-  const obs=new MutationObserver(()=>p9KeepBookingFormVisible());
-  obs.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:["class","style"]});
+
+document.addEventListener("click", function(event){
+  const slotButton = event.target.closest(".slot-btn,.slot-button");
+  if(!slotButton) return;
+  setTimeout(v7rc3KeepContactFormStable, 60);
+}, true);
+
+document.addEventListener("DOMContentLoaded", function(){
+  v7rc3KeepContactFormStable();
 });
